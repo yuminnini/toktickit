@@ -11,7 +11,14 @@ export interface SystemStatus {
 }
 
 export async function checkSystem(): Promise<SystemStatus> {
-  const healthRes = await fetch(`${API_URL}/api/health`);
+  let healthRes: Response;
+  try {
+    healthRes = await fetch(`${API_URL}/api/health`);
+  } catch {
+    // Network-level failure (server unreachable) — normalize to a useful message.
+    throw new Error("Unable to connect to TokTickIT API");
+  }
+
   if (!healthRes.ok) {
     throw new Error("Unable to connect to TokTickIT API");
   }
