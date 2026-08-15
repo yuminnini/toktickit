@@ -15,15 +15,22 @@ export async function checkSystem(): Promise<SystemStatus> {
   try {
     healthRes = await fetch(`${API_URL}/api/health`);
   } catch {
-    // Network-level failure (server unreachable) — normalize to a useful message.
     throw new Error("Unable to connect to TokTickIT API");
   }
-
   if (!healthRes.ok) {
     throw new Error("Unable to connect to TokTickIT API");
   }
 
-  // TODO(Issue 4): fetch `${API_URL}/api/categories` here and return the
-  // real list instead of an empty array.
-  return { online: true, categories: [] };
+  let categoriesRes: Response;
+  try {
+    categoriesRes = await fetch(`${API_URL}/api/categories`);
+  } catch {
+    throw new Error("Unable to connect to TokTickIT API");
+  }
+  if (!categoriesRes.ok) {
+    throw new Error("Unable to connect to TokTickIT API");
+  }
+
+  const categories: Category[] = await categoriesRes.json();
+  return { online: true, categories };
 }
