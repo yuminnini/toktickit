@@ -7,7 +7,7 @@
 | PR | Branch | Reviewer verdict |
 |----|--------|------------------|
 | #5 | feature/1-project-foundation | Approved |
-| #6 | feature/2-health-check | Approved  |
+| #7 | feature/2-health-check | Approved  |
 | #8 | feature/3-category-seed | Approved  |
 | #9 | feature/4-category-list | Approved |
 
