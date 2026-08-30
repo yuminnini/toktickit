@@ -60,7 +60,7 @@ Create a Ticket for the given Requester.
 - **500:** unexpected error
 
 ### 3.5 `GET /api/tickets` — list (My Tickets)
-- **Query:** `requesterId` (required) `search` `category` `requestedPriority` `status` `sort` `order` `page` `pageSize` — full contract in §4 below
+**Query:** `requesterId` (required) `search` `categoryId` `requestedPriority` `status` `sort` `order` `page` `pageSize` — full contract in §4 below
 - **200:**
 ```json
   { "data": [ { "id": 1, "ticketNumber": "TKT-2026-000001", "summary": "...",
@@ -116,7 +116,7 @@ Soft-remove.
 | Param | Values | Default | Invalid input behavior |
 |---|---|---|---|
 | `search` | free text, matches `ticketNumber` OR `summary` (case-insensitive substring) | none | ignored if empty string |
-| `category` | Category id | none | ignored if not a valid id (no filter applied, not an error — BR-07) |
+| `categoryId` | Category id | none | ignored if not a valid id (no filter applied, not an error — BR-07) |
 | `requestedPriority` | `LOW\|MEDIUM\|HIGH` | none | ignored if invalid |
 | `status` | `NEW\|OPEN\|IN_PROGRESS\|RESOLVED\|CLOSED` | none | ignored if invalid (in Lab 2 practice only `NEW` ever exists) |
 | `sort` | `createdAt\|ticketNumber\|requestedPriority\|currentStatus` | `createdAt` | falls back to default if invalid |

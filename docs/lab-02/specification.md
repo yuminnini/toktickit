@@ -169,6 +169,7 @@ explicitly *not* secure, documented as the Lab 2 testing mechanism).
 | `GET /api/tickets?requesterId=&search=&category=&requestedPriority=&status=&sort=&order=&page=&pageSize=` | Paginated, owned ticket list | 200, `{ data:[...], page, pageSize, total, totalPages }` | 400 missing requesterId |
 | `GET /api/tickets/:id?requesterId=` | One owned Ticket + its active Attachments | 200 | 404 not owned/not found |
 | `POST /api/tickets/:id/attachments?requesterId=` | Upload one Attachment (multipart) | 201, Attachment metadata | 400 invalid type/size, 404 not owned, 409 already 5 active attachments |
+| `GET /api/attachments/:id` | Attachment metadata (works even if soft-removed — metadata must stay visible) | 200, metadata | 404 not owned/not found |
 | `GET /api/attachments/:id/download?requesterId=` | Download an **active** Attachment | 200, file stream | 404 removed/not owned/not found |
 | `DELETE /api/attachments/:id?requesterId=` body `{ reason }` | Soft-remove an Attachment | 200, updated metadata | 400 missing reason, 404 not owned/not found |
 
@@ -180,7 +181,7 @@ explicitly *not* secure, documented as the Lab 2 testing mechanism).
 ## 9. Acceptance Criteria
 - AC-01: Given valid Ticket data, when the Requester submits the form, then one Ticket is saved and the official Ticket Number is displayed. *(FR-01, FR-02)*
 - AC-02: Given no Development Requester is selected, when the user attempts to open My Tickets or Create Ticket, then the Requester Selection screen is shown instead. *(BR-05)*
-- AC-03: Given Requester B is selected, when a Ticket belonging to Requester A is requested by ID, then a 404 is returned and no Ticket data is shown. *(BR-13)*
+- AC-03: Given Requester B is selected, when a Ticket or an Attachment belonging to Requester A is requested by ID — via ticket detail, attachment metadata, attachment download, or attachment removal — then a 404 is returned and no data is returned or modified. *(BR-13)*
 - AC-04: Given the Summary field is empty, when the Requester submits, then a field-level error appears below Summary and no API call is made. *(BR-08)*
 - AC-05: Given an in-flight submission, when the Requester clicks Submit again, then the button is disabled and no duplicate Ticket is created. *(BR-08)*
 - AC-06: Given the backend is unreachable, when the Requester submits a valid form, then a safe error message is shown and all entered field values remain. *(BR-09)*
@@ -196,6 +197,10 @@ explicitly *not* secure, documented as the Lab 2 testing mechanism).
 - AC-16: Given no active Requesters exist, when the Selection screen loads, then a safe empty state is shown instead of a blank dropdown. *(FR-08)*
 - AC-17: Given the Requesters API fails, when the Selection screen loads, then a safe error state is shown instead of a crash or infinite spinner. *(FR-08)*
 - AC-18: Given the viewport is under 768px, when any of the three main screens render, then no horizontal scrolling occurs and all controls remain reachable. *(§8.7)*
+- AC-19: Given a search term that matches a Ticket's `summary` or `ticketNumber` (case-insensitive substring), when My Tickets loads with that search term, then only matching Tickets are returned. *(FR-03)*
+- AC-20: Given a `categoryId`, `requestedPriority`, or `status` filter value, when My Tickets loads with that filter applied, then only Tickets matching the filter value are returned. *(FR-03)*
+- AC-21: Given a `sort` field and `order` direction, when My Tickets loads with those parameters, then the returned Tickets are ordered accordingly. *(FR-03, BR-07)*
+- AC-22: Given a field fails validation, when the error message renders, then the field's input is associated to that message via `aria-describedby`. *(§12 Accessibility)*
 
 ## 10. Definition of Done
 - [ ] Every FR and BR above is implemented and traceable to at least one AC
@@ -214,3 +219,17 @@ explicitly *not* secure, documented as the Lab 2 testing mechanism).
 - **Category has no `active` flag** — Lab 1's schema is reused as-is; only `RequesterUser` and `RelatedSystem` get `active` per the explicit Lab 2 requirement.
 - **Attachment upload failure does not roll back Ticket creation** — treated as two separate, independently-recoverable operations rather than one all-or-nothing transaction.
 - **Selected Requester stored in `sessionStorage`**, not `localStorage` — intentionally resets between browser sessions so it doesn't linger like a fake "remembered login."
+- **No separate confirmation modal before soft-remove.** The required `reason` field itself
+  is the confirmation step — a Requester must consciously type a reason before the DELETE
+  request fires, which is enough friction to prevent accidental removal without adding a
+  second "Are you sure?" dialog on top of it.
+- **No in-app attachment preview in Lab 2** (no image lightbox or PDF viewer). Only
+  download is supported. The stakeholder's requirement ("inspect attachments") is
+  satisfied by download; in-app preview is unrequested extra scope.
+- **Ticket-list query parameter renamed `category` → `categoryId`** in `api-spec.md` §4,
+  to match the `categoryId` field name already used in the `POST /api/tickets` body
+  (§8) — avoids ambiguity about whether the filter takes a category name or an id (it's
+  always an id).
+- **Seed data will match the labsheet minimums exactly**, not over-seed: 6 Related
+  Systems, 4 active + 1 inactive Development Requester. Fixed, known counts make
+  pagination and "no active Requesters" test fixtures predictable in Phase 2 onward.

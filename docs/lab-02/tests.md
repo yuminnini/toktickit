@@ -24,6 +24,13 @@ a Business Rule.
 | API-09 | API | AC-14 | `DELETE /api/attachments/:id` with a reason | 200, `removedAt`/`removalReason` set | `server/tests/lab-02/attachments.api.test.ts` | Planned |
 | API-10 | API | AC-15 | `GET /api/attachments/:id/download` on a removed attachment | 404 (not 200, not distinguishable from non-existent) | `server/tests/lab-02/attachments.api.test.ts` | Planned |
 | API-11 | API | BR-11 | `GET /api/requesters` | 200, inactive seeded Requester is absent from the list | `server/tests/lab-02/requesters.api.test.ts` | Planned |
+| API-12 | API | AC-03, BR-13 | `GET /api/attachments/:id` (metadata) where the attachment belongs to a different requester | 404, no metadata leaked | `server/tests/lab-02/attachments.api.test.ts` | Planned |
+| API-13 | API | AC-03, BR-13 | `GET /api/attachments/:id/download` where the attachment belongs to a different requester | 404 | `server/tests/lab-02/attachments.api.test.ts` | Planned |
+| API-14 | API | AC-03, BR-13 | `DELETE /api/attachments/:id` where the attachment belongs to a different requester | 404, attachment is not modified/removed | `server/tests/lab-02/attachments.api.test.ts` | Planned |
+| API-15 | API | BR-11 | `POST /api/tickets` with `requesterId` belonging to a seeded **inactive** Requester | 400, bad-requester error (not 201) | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
+| API-16 | API | AC-19 | `GET /api/tickets?search=laptop` on a mix of matching/non-matching seeded tickets | 200, only tickets with "laptop" in summary/ticketNumber returned | `server/tests/lab-02/my-tickets.api.test.ts` | Planned |
+| API-17 | API | AC-20 | `GET /api/tickets?categoryId=<id>&requestedPriority=HIGH` | 200, only tickets matching **both** filters returned | `server/tests/lab-02/my-tickets.api.test.ts` | Planned |
+| API-18 | API | AC-21 | `GET /api/tickets?sort=ticketNumber&order=asc` | 200, results ordered ascending by ticketNumber | `server/tests/lab-02/my-tickets.api.test.ts` | Planned |
 | UI-01 | UI | AC-02 | Navigating to My Tickets with no Requester selected | Redirected to Requester Selection screen | `client/.../lab-02/RouteGuard.test.tsx` | Planned |
 | UI-02 | UI | AC-04 | Submitting Create Ticket with empty Summary | Field-level message shown; `checkSystem`/create API not called | `client/.../lab-02/CreateTicket.test.tsx` | Planned |
 | UI-03 | UI | AC-05 | Clicking Submit twice quickly | Button disabled after first click; only one API call fires | `client/.../lab-02/CreateTicket.test.tsx` | Planned |
@@ -37,6 +44,9 @@ a Business Rule.
 | UI-11 | UI | AC-09 | Clicking "Next" on My Tickets pagination (mocked page-1 API response) | UI calls list API with `page=2`; displays the returned second-page tickets, "Previous" becomes enabled | `client/.../lab-02/MyTickets.test.tsx` | Planned |
 | STYLE-01 | UI Style | §8.3, §8.8 | Required-field asterisk and validation message placement on Create Ticket | Asterisk present on required labels; error renders directly below its field | `client/.../lab-02/CreateTicket.style.test.tsx` | Planned |
 | STYLE-02 | UI Style | §8.8 | Badge component renders for each `requestedPriority`/`currentStatus` value | Correct color token class applied per value, no reliance on color alone (text label present) | `client/.../lab-02/Badge.style.test.tsx` | Planned |
+| STYLE-03 | UI Style | AC-22 | Submit Create Ticket with Summary empty | Summary input's `aria-describedby` attribute references the rendered error message's `id` | `client/.../lab-02/CreateTicket.style.test.tsx` | Planned |
+| API-19 | API | BR-08 | `POST /api/tickets` with empty `description` (after trim) | 400, `fields.description` message present | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
+| API-20 | API | BR-08 | `POST /api/tickets` with `description` at 2001 chars (boundary, over the 2000 limit) | 400 validation error | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
 | RESP-01 | Responsive | AC-18, §8.7 | Playwright screenshot of Create Ticket, My Tickets, Ticket Detail at 375px | No horizontal scroll, no clipped/overlapping elements (manual checklist §4 below) | `e2e/lab-02/responsive.spec.ts` | Planned |
 | RESP-02 | Responsive | §8.7 | Same 3 screens at 1024px (tablet) and 1280px (desktop) | Layout matches `ui-spec.md` breakpoint rules | `e2e/lab-02/responsive.spec.ts` | Planned |
 | E2E-01 | E2E | AC-01, AC-11 | Select Requester → Create Ticket with 1 attachment → see success | Ticket Number shown; ticket appears in My Tickets after navigating there | `e2e/lab-02/requester-ticket-flow.spec.ts` | Planned |
@@ -48,7 +58,7 @@ a Business Rule.
 |---|---|
 | AC-01 | API-01, E2E-01 |
 | AC-02 | UI-01 |
-| AC-03 | API-02, E2E-02 |
+| AC-03 | API-02, API-12, API-13, API-14, E2E-02 |
 | AC-04 | API-03, UI-02 |
 | AC-05 | UI-03 |
 | AC-06 | UI-04 |
@@ -64,6 +74,10 @@ a Business Rule.
 | AC-16 | UI-09 |
 | AC-17 | UI-10 |
 | AC-18 | RESP-01 |
+| AC-19 | API-16 |
+| AC-20 | API-17 |
+| AC-21 | API-18 |
+| AC-22 | STYLE-03 |
 
 ## 4. Responsive and Visual Checklist
 (Applied when reviewing RESP-01/RESP-02 screenshots, per labsheet §8.8 — filled in during Phase 7)

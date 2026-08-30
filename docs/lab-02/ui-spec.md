@@ -141,7 +141,9 @@ Reference: labsheet §8.5.
 - **No** Comments/Notes/Actions Taken sections exist on this screen (excluded by scope)
 
 **Attachment states:**
-- Active: filename + size + Download button + Remove button (destructive style)
+- Active: filename + size + Download button + Remove button (destructive style) — clicking
+- Remove opens an inline reason prompt; entering a reason and confirming is the only
+confirmation step required (no separate "Are you sure?" modal, per §11 decision)
 - Uploading: progress indicator, disabled actions until complete
 - Invalid (client-side rejected before upload): same inline red row as Create Ticket §7
 - Removed: filename still shown, grayed out, "Removed — <reason>" label, no
