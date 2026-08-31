@@ -233,3 +233,6 @@ explicitly *not* secure, documented as the Lab 2 testing mechanism).
 - **Seed data will match the labsheet minimums exactly**, not over-seed: 6 Related
   Systems, 4 active + 1 inactive Development Requester. Fixed, known counts make
   pagination and "no active Requesters" test fixtures predictable in Phase 2 onward.
+- **`onDelete` behavior on all foreign keys uses the Prisma default (`Restrict`).**
+  Deletion of Requesters/Categories/RelatedSystems/Tickets is out of scope for Lab 2
+  (no delete UI exists), so this default is intentional, not an oversight.

@@ -13,6 +13,7 @@ a Business Rule.
 |---|---|---|---|---|---|---|
 | UNIT-01 | Unit | BR-01 | Ticket Number generator produces `TKT-<year>-<id padded 6>` | Format matches regex exactly | `server/tests/lab-02/ticket-number.unit.test.ts` | Planned |
 | UNIT-02 | Unit | §5.3 (seed) | Running the Lab 2 seed twice | No duplicate Requesters/Related Systems created | `server/tests/lab-02/seed.unit.test.ts` | Planned |
+| UNIT-03 | Unit | §5 (data model) | `RequesterUser.email` unique constraint | Creating a second Requester with a duplicate email is rejected by Prisma/PostgreSQL | `server/tests/lab-02/requester-constraint.unit.test.ts` | Planned |
 | API-01 | API | AC-01 | `POST /api/tickets` with valid body | 201, response includes generated `ticketNumber` | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
 | API-02 | API | AC-03, BR-13 | `GET /api/tickets/:id` with a `requesterId` that doesn't own it | 404, no Ticket data leaked | `server/tests/lab-02/ticket-detail.api.test.ts` | Planned |
 | API-03 | API | AC-04, BR-08 | `POST /api/tickets` with empty `summary` | 400, `fields.summary` message present | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
