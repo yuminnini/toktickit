@@ -8,10 +8,12 @@ describe("RequesterUser email uniqueness constraint", () => {
 
         await prisma.requesterUser.create({ data: { name: "Constraint Test A", email } });
 
-        await expect(
-            prisma.requesterUser.create({ data: { name: "Constraint Test B", email } })
-        ).rejects.toThrow();
-
-        await prisma.requesterUser.deleteMany({ where: { email } });
+        try {
+            await expect(
+                prisma.requesterUser.create({ data: { name: "Constraint Test B", email } })
+            ).rejects.toThrow();
+        } finally {
+            await prisma.requesterUser.deleteMany({ where: { email } });
+        }
     });
 });
