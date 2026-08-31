@@ -86,7 +86,7 @@ model Attachment {
   ticketId       Int
   ticket         Ticket    @relation(fields: [ticketId], references: [id])
   originalName   String
-  storedFilename String
+  storedFilename String @unique 
   mimeType       String
   sizeBytes      Int
   uploadedAt     DateTime  @default(now())
