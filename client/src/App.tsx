@@ -1,57 +1,30 @@
-import { useState } from "react";
-import { checkSystem, Category } from "./api.js";
-
-type UiState = "idle" | "loading" | "success" | "error";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import RequesterSelection from "./pages/RequesterSelection";
+import RequesterRouteGuard from "./components/RequesterRouteGuard";
+import AppShell from "./components/AppShell";
+import MyTickets from "./pages/MyTickets";
+import CreateTicket from "./pages/CreateTicket";
+import CheckSystem from "./pages/CheckSystem";
 
 export default function App() {
-  const [state, setState] = useState<UiState>("idle");
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [errorMessage, setErrorMessage] = useState("");
-
-  async function handleCheck() {
-    setState("loading");
-    try {
-      const result = await checkSystem();
-      setCategories(result.categories);
-      setState("success");
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Unable to connect to TokTickIT API");
-      setState("error");
-    }
-  }
-
   return (
-    <div className="container py-5" style={{ maxWidth: 640 }}>
-      <h1 className="h3 mb-4">
-        TokTickIT <span className="text-success">IT Service Desk</span>
-      </h1>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/requester-selection" element={<RequesterSelection />} />
+        <Route path="/check-system" element={<CheckSystem />} />
 
-      <button className="btn btn-success" onClick={handleCheck} disabled={state === "loading"}>
-        {state === "loading" ? "Loading…" : "Check System"}
-      </button>
+        {/* Guarded routes requiring selected Requester */}
+        <Route element={<RequesterRouteGuard />}>
+          <Route element={<AppShell />}>
+            <Route path="/" element={<Navigate to="/my-tickets" replace />} />
+            <Route path="/my-tickets" element={<MyTickets />} />
+            <Route path="/tickets/new" element={<CreateTicket />} />
+          </Route>
+        </Route>
 
-      {state === "success" && (
-        <div className="mt-4">
-          <p className="fw-bold text-success">System Status: Online</p>
-          {categories.length > 0 && (
-            <>
-              <p className="fw-bold mb-1">Supported Request Categories</p>
-              <ul>
-                {categories.map((c) => (
-                  <li key={c.id}>{c.name}</li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-      )}
-
-      {state === "error" && (
-        <div className="mt-4">
-          <p className="fw-bold text-danger">System Status: Offline</p>
-          <p>{errorMessage}</p>
-        </div>
-      )}
-    </div>
+        {/* Catch-all fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

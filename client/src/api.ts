@@ -34,3 +34,36 @@ export async function checkSystem(): Promise<SystemStatus> {
   const categories: Category[] = await categoriesRes.json();
   return { online: true, categories };
 }
+export interface Requester {
+  id: number;
+  name: string;
+}
+
+export interface RelatedSystem {
+  id: number;
+  name: string;
+}
+
+export async function fetchRequesters(): Promise<Requester[]> {
+  const res = await fetch(`${API_URL}/api/requesters`);
+  if (!res.ok) {
+    throw new Error("Unable to load requesters");
+  }
+  return res.json();
+}
+
+export async function fetchRelatedSystems(): Promise<RelatedSystem[]> {
+  const res = await fetch(`${API_URL}/api/related-systems`);
+  if (!res.ok) {
+    throw new Error("Unable to load related systems");
+  }
+  return res.json();
+}
+
+export async function fetchCategories(): Promise<Category[]> {
+  const res = await fetch(`${API_URL}/api/categories`);
+  if (!res.ok) {
+    throw new Error("Unable to load categories");
+  }
+  return res.json();
+}
