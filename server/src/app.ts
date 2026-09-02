@@ -39,4 +39,30 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
     res.status(500).json({ error: "Unable to load categories" });
   }
 });
+app.get("/api/related-systems", async (_req: Request, res: Response) => {
+  try {
+    const systems = await getPrisma().relatedSystem.findMany({
+      where: { active: true },
+      orderBy: { id: "asc" },
+      select: { id: true, name: true },
+    });
+    res.status(200).json(systems);
+  } catch {
+    res.status(500).json({ error: "INTERNAL_ERROR", message: "Unable to load related systems" });
+  }
+});
+
+app.get("/api/requesters", async (_req: Request, res: Response) => {
+  try {
+    const requesters = await getPrisma().requesterUser.findMany({
+      where: { active: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    });
+    res.status(200).json(requesters);
+  } catch {
+    res.status(500).json({ error: "INTERNAL_ERROR", message: "Unable to load requesters" });
+  }
+});
+
 export default app;
