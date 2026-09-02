@@ -37,38 +37,14 @@ export interface TicketItem {
   ticketNumber: string;
   summary: string;
   description?: string;
-  category: string;
+  category: { id: number; name: string };
   categoryId: number;
-  relatedSystem: string;
+  relatedSystem: { id: number; name: string };
   relatedSystemId: number;
   requestedPriority: PriorityType;
   currentStatus: TicketStatusType;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface TicketListResponse {
-  data: TicketItem[];
-  page: number;
-  pageSize: number;
-  total: number;
-  totalPages: number;
-  unfilteredTotal: number;
-}
-
-export interface AttachmentItem {
-  id: number;
-  originalName: string;
-  mimeType: string;
-  sizeBytes: number;
-  uploadedAt: string;
-  removedAt: string | null;
-  removalReason: string | null;
-}
-
-export interface TicketDetailResponse extends TicketItem {
-  requester: { id: number; name: string; email: string };
-  attachments: AttachmentItem[];
 }
 
 export async function checkSystem(): Promise<SystemStatus> {
@@ -136,44 +112,4 @@ export async function createTicket(input: TicketInput): Promise<TicketItem> {
     throw err;
   }
   return data;
-}
-
-export interface FetchTicketsParams {
-  requesterId: number;
-  search?: string;
-  categoryId?: number | "";
-  requestedPriority?: PriorityType | "";
-  status?: TicketStatusType | "";
-  sort?: string;
-  order?: "asc" | "desc";
-  page?: number;
-  pageSize?: number;
-}
-
-export async function fetchTickets(params: FetchTicketsParams): Promise<TicketListResponse> {
-  const query = new URLSearchParams();
-  query.set("requesterId", String(params.requesterId));
-
-  if (params.search) query.set("search", params.search);
-  if (params.categoryId) query.set("categoryId", String(params.categoryId));
-  if (params.requestedPriority) query.set("requestedPriority", params.requestedPriority);
-  if (params.status) query.set("status", params.status);
-  if (params.sort) query.set("sort", params.sort);
-  if (params.order) query.set("order", params.order);
-  if (params.page) query.set("page", String(params.page));
-  if (params.pageSize) query.set("pageSize", String(params.pageSize));
-
-  const res = await fetch(`${API_URL}/api/tickets?${query.toString()}`);
-  if (!res.ok) {
-    throw new Error("Unable to load tickets");
-  }
-  return res.json();
-}
-
-export async function fetchTicketDetail(ticketId: number, requesterId: number): Promise<TicketDetailResponse> {
-  const res = await fetch(`${API_URL}/api/tickets/${ticketId}?requesterId=${requesterId}`);
-  if (!res.ok) {
-    throw new Error("Unable to load ticket detail");
-  }
-  return res.json();
 }

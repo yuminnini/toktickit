@@ -47,17 +47,17 @@
 
 - Branch: `feature/lab2-ticket-creation`
 - Commit/PR: Pending
-- Scope completed: Phase 2 Bugfixes and complete Phase 3 Ticket Creation flow including POST /api/tickets, TKT ticket number generation, and CreateTicket.tsx UI with validation.
-- Requirements: FR-01, FR-02, BR-01, BR-02, AC-04, AC-05, AC-22
+- Scope completed: Phase 2 Bugfixes and complete Phase 3 Ticket Creation flow including POST /api/tickets, TKT ticket number generation, and CreateTicket.tsx UI with validation. Removed accidentally included Phase 4 endpoints to maintain PR scope.
+- Requirements: FR-01, FR-02, BR-01, BR-02, BR-08, BR-09, AC-01, AC-04, AC-05, AC-06, AC-22
 
 ### Files changed
 - `client/src/context/RequesterContext.tsx`: Added robust type checking for session validation.
 - `client/src/pages/RequesterSelection.tsx`: Added missing Cancel button.
 - `client/tests/lab-02/RouteGuard.test.tsx`: Implemented Change Requester session clear test.
 - `server/src/services/ticketNumber.ts`: New service to format ID to TKT-YYYY-00000X.
-- `server/src/app.ts`: Implemented POST /api/tickets with validations and transaction for ticket number generation.
-- `client/src/api.ts`: Added createTicket API integration.
-- `client/src/pages/CreateTicket.tsx`: Implemented UI form with active reference data fetch, React Hook Form validation, and success alert.
+- `server/src/app.ts`: Implemented POST /api/tickets with validations and transaction for ticket number generation. Removed Phase 4 endpoints.
+- `client/src/api.ts`: Added createTicket API integration. Fixed TicketItem types and removed Phase 4 fetchers.
+- `client/src/pages/CreateTicket.tsx`: Implemented UI form with useState validation (instead of React Hook Form per previous log error), added loading/error states for reference data with Retry button.
 - `server/tests/lab-02/create-ticket.api.test.ts`: Integration tests for valid and invalid ticket creation.
 - `server/tests/lab-02/ticket-number.unit.test.ts`: Unit test for ticket number formatting.
 - `client/tests/lab-02/CreateTicket.test.tsx`: UI tests checking field validation and duplicate click prevention.
@@ -69,7 +69,7 @@
 
 ### Verification run
 - `cd client && npm test -- --run` -> Pass; 5 test files, 16 tests passed
-- `cd server && npm test -- --run` -> Pass; 8 test files, 13 tests passed
+- `cd server && npm test -- --run` -> Pass; 8 test files, 14 tests passed
 
 ### Evidence
 - Screenshot/artifact paths: None

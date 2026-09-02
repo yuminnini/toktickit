@@ -34,9 +34,27 @@ export default function CreateTicket() {
   const categorySelectRef = useRef<HTMLSelectElement>(null);
   const relatedSystemSelectRef = useRef<HTMLSelectElement>(null);
 
+  const [isRefLoading, setIsRefLoading] = useState(true);
+  const [refError, setRefError] = useState(false);
+
+  const loadReferenceData = () => {
+    setIsRefLoading(true);
+    setRefError(false);
+    Promise.all([fetchCategories(), fetchRelatedSystems()])
+      .then(([cats, sys]) => {
+        setCategories(cats);
+        setRelatedSystems(sys);
+      })
+      .catch(() => {
+        setRefError(true);
+      })
+      .finally(() => {
+        setIsRefLoading(false);
+      });
+  };
+
   useEffect(() => {
-    fetchCategories().then(setCategories).catch(() => {});
-    fetchRelatedSystems().then(setRelatedSystems).catch(() => {});
+    loadReferenceData();
   }, []);
 
   // Auto-select first category and system when loaded if not yet set
@@ -180,6 +198,15 @@ export default function CreateTicket() {
         </div>
       )}
 
+      {refError && (
+        <div className="alert alert-warning mb-4 d-flex justify-content-between align-items-center" role="alert">
+          <span>Unable to load Categories or Related Systems.</span>
+          <button className="btn btn-outline-warning btn-sm text-dark" onClick={loadReferenceData}>
+            Retry
+          </button>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} noValidate>
         {/* Read-only Context Row */}
         <div className="row g-3 mb-3">
@@ -220,7 +247,9 @@ export default function CreateTicket() {
               value={categoryId}
               onChange={(e) => setCategoryId(Number(e.target.value))}
               aria-describedby={errors.categoryId ? "categoryId-error" : undefined}
+              disabled={isRefLoading || refError}
             >
+              <option value="" disabled>{isRefLoading ? "Loading..." : "Select Category"}</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -245,7 +274,9 @@ export default function CreateTicket() {
               value={relatedSystemId}
               onChange={(e) => setRelatedSystemId(Number(e.target.value))}
               aria-describedby={errors.relatedSystemId ? "relatedSystemId-error" : undefined}
+              disabled={isRefLoading || refError}
             >
+              <option value="" disabled>{isRefLoading ? "Loading..." : "Select System"}</option>
               {relatedSystems.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
