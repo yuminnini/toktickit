@@ -19,7 +19,17 @@ function loadFromStorage(): Requester | null {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     try {
-        return JSON.parse(raw) as Requester;
+        const parsed = JSON.parse(raw);
+        if (
+            parsed &&
+            typeof parsed === "object" &&
+            typeof parsed.id === "number" &&
+            typeof parsed.name === "string" &&
+            parsed.name.trim().length > 0
+        ) {
+            return { id: parsed.id, name: parsed.name };
+        }
+        return null;
     } catch {
         return null;
     }

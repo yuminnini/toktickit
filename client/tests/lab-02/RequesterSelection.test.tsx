@@ -84,4 +84,32 @@ describe("RequesterSelection (UI-09, UI-10 / AC-16, AC-17)", () => {
             expect(screen.getByText("My Tickets Screen")).toBeInTheDocument();
         });
     });
+
+    it("resets selection when Cancel is clicked", async () => {
+        vi.spyOn(api, "fetchRequesters").mockResolvedValue([
+            { id: 1, name: "Jennifer Anderson" },
+        ]);
+
+        renderScreen();
+
+        await waitFor(() => {
+            expect(screen.getByLabelText(/development requester/i)).toBeInTheDocument();
+        });
+
+        const continueButton = screen.getByRole("button", { name: /continue/i });
+        const cancelButton = screen.getByRole("button", { name: /cancel/i });
+        const select = screen.getByLabelText(/development requester/i) as HTMLSelectElement;
+
+        expect(cancelButton).toBeDisabled();
+        expect(continueButton).toBeDisabled();
+
+        fireEvent.change(select, { target: { value: "1" } });
+        expect(cancelButton).not.toBeDisabled();
+        expect(continueButton).not.toBeDisabled();
+
+        fireEvent.click(cancelButton);
+        expect(select.value).toBe("");
+        expect(cancelButton).toBeDisabled();
+        expect(continueButton).toBeDisabled();
+    });
 });

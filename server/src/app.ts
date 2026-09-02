@@ -1,33 +1,21 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
+import { randomUUID } from "node:crypto";
+import { Priority, TicketStatus } from "@prisma/client";
 import { getPrisma } from "./prisma.js";
-// getPrisma() is your lazy database handle. Call it INSIDE a route when you
-// need the DB (Issue 4). It is intentionally unused until then.
+import { formatTicketNumber } from "./services/ticketNumber.js";
 
-// The Express app is exported separately from app.listen() (see index.ts) so
-// Supertest can import `app` without opening a port. Do not merge these files.
 export const app = express();
 
-app.use(cors());          // already wired: lets the Vite dev server call this API
+app.use(cors());
 app.use(express.json());
 
-// ---------------------------------------------------------------------------
-// Issue 2 — API health check
-// Make the test in tests/lab-01/health.test.ts pass.
-// It must return HTTP 200 with JSON: { status: "ok", service: "TokTickIT API" }
-// ---------------------------------------------------------------------------
+// Health Check
 app.get("/api/health", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok", service: "TokTickIT API" });
 });
 
-// ---------------------------------------------------------------------------
-// Issue 4 — Category list
-// Add:  GET /api/categories
-//   -> read categories from PostgreSQL via getPrisma().category.findMany(...)
-//   -> return each { id, name } in a predictable (id) order
-//   -> on failure, respond 500 with a safe message (no internal details)
-// TODO(Issue 4): implement the route here.
-// ---------------------------------------------------------------------------
+// Categories
 app.get("/api/categories", async (_req: Request, res: Response) => {
   try {
     const categories = await getPrisma().category.findMany({
@@ -39,6 +27,8 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
     res.status(500).json({ error: "Unable to load categories" });
   }
 });
+
+// Related Systems
 app.get("/api/related-systems", async (_req: Request, res: Response) => {
   try {
     const systems = await getPrisma().relatedSystem.findMany({
@@ -52,6 +42,7 @@ app.get("/api/related-systems", async (_req: Request, res: Response) => {
   }
 });
 
+// Requesters (active only)
 app.get("/api/requesters", async (_req: Request, res: Response) => {
   try {
     const requesters = await getPrisma().requesterUser.findMany({
@@ -62,6 +53,121 @@ app.get("/api/requesters", async (_req: Request, res: Response) => {
     res.status(200).json(requesters);
   } catch {
     res.status(500).json({ error: "INTERNAL_ERROR", message: "Unable to load requesters" });
+  }
+});
+
+// Create Ticket
+app.post("/api/tickets", async (req: Request, res: Response) => {
+  try {
+    const {
+      requesterId,
+      categoryId,
+      relatedSystemId,
+      summary,
+      description,
+      requestedPriority,
+    } = req.body;
+
+    const prisma = getPrisma();
+    const fields: Record<string, string> = {};
+
+    // Validate requesterId
+    const numRequesterId = Number(requesterId);
+    if (!requesterId || !Number.isInteger(numRequesterId)) {
+      res.status(400).json({ error: "BAD_REQUESTER", message: "requesterId is required" });
+      return;
+    }
+    const requester = await prisma.requesterUser.findUnique({
+      where: { id: numRequesterId },
+    });
+    if (!requester || !requester.active) {
+      res.status(400).json({ error: "BAD_REQUESTER", message: "Invalid or inactive requester" });
+      return;
+    }
+
+    // Validate categoryId
+    const numCategoryId = Number(categoryId);
+    if (!categoryId || !Number.isInteger(numCategoryId)) {
+      fields.categoryId = "Valid category is required";
+    } else {
+      const category = await prisma.category.findUnique({
+        where: { id: numCategoryId },
+      });
+      if (!category) {
+        fields.categoryId = "Category not found";
+      }
+    }
+
+    // Validate relatedSystemId
+    const numRelatedSystemId = Number(relatedSystemId);
+    if (!relatedSystemId || !Number.isInteger(numRelatedSystemId)) {
+      fields.relatedSystemId = "Valid related system is required";
+    } else {
+      const system = await prisma.relatedSystem.findUnique({
+        where: { id: numRelatedSystemId },
+      });
+      if (!system || !system.active) {
+        fields.relatedSystemId = "Related system not found or inactive";
+      }
+    }
+
+    // Validate summary (1-150 chars after trim)
+    const trimmedSummary = typeof summary === "string" ? summary.trim() : "";
+    if (trimmedSummary.length < 1 || trimmedSummary.length > 150) {
+      fields.summary = "Required, 1-150 characters";
+    }
+
+    // Validate description (1-2000 chars after trim)
+    const trimmedDesc = typeof description === "string" ? description.trim() : "";
+    if (trimmedDesc.length < 1 || trimmedDesc.length > 2000) {
+      fields.description = "Required, 1-2000 characters";
+    }
+
+    // Validate requestedPriority
+    if (!requestedPriority || !Object.values(Priority).includes(requestedPriority)) {
+      fields.requestedPriority = "Valid requested priority is required (LOW, MEDIUM, HIGH)";
+    }
+
+    if (Object.keys(fields).length > 0) {
+      res.status(400).json({
+        error: "VALIDATION_ERROR",
+        message: "One or more fields are invalid",
+        fields,
+      });
+      return;
+    }
+
+    // Atomic creation with official Ticket Number
+    const ticket = await prisma.$transaction(async (tx) => {
+      const provisionalNumber = `TMP-${randomUUID()}`;
+      const created = await tx.ticket.create({
+        data: {
+          ticketNumber: provisionalNumber,
+          requesterId: numRequesterId,
+          categoryId: numCategoryId,
+          relatedSystemId: numRelatedSystemId,
+          summary: trimmedSummary,
+          description: trimmedDesc,
+          requestedPriority: requestedPriority as Priority,
+          currentStatus: TicketStatus.NEW,
+        },
+      });
+
+      const officialNumber = formatTicketNumber(created.id);
+      return tx.ticket.update({
+        where: { id: created.id },
+        data: { ticketNumber: officialNumber },
+        include: {
+          category: { select: { id: true, name: true } },
+          relatedSystem: { select: { id: true, name: true } },
+          attachments: true,
+        },
+      });
+    });
+
+    res.status(201).json(ticket);
+  } catch {
+    res.status(500).json({ error: "INTERNAL_ERROR", message: "Unable to create ticket" });
   }
 });
 
