@@ -102,6 +102,15 @@ export default function RequesterSelection() {
 
                 <div className="d-flex justify-content-end gap-2 mt-3">
                     <button
+                        type="button"
+                        className="btn btn-outline-secondary"
+                        disabled={state !== "ready" || selectedId === ""}
+                        onClick={() => setSelectedId("")}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
                         className="btn btn-success"
                         style={{ backgroundColor: "var(--color-primary)", borderColor: "var(--color-primary)" }}
                         disabled={state !== "ready" || selectedId === ""}

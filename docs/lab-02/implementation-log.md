@@ -42,3 +42,43 @@
 
 ### Next safe task
 - Merge `feature/lab2-3-requester-context` to `lab2-staging` and begin **Phase 3: Ticket creation API and Create Ticket UI (`feature/lab2-ticket-creation`)**.
+
+## 2026-09-02 - Phase 3: Ticket creation API and Create Ticket UI
+
+- Branch: `feature/lab2-ticket-creation`
+- Commit/PR: Pending
+- Scope completed: Phase 2 Bugfixes and complete Phase 3 Ticket Creation flow including POST /api/tickets, TKT ticket number generation, and CreateTicket.tsx UI with validation.
+- Requirements: FR-01, FR-02, BR-01, BR-02, AC-04, AC-05, AC-22
+
+### Files changed
+- `client/src/context/RequesterContext.tsx`: Added robust type checking for session validation.
+- `client/src/pages/RequesterSelection.tsx`: Added missing Cancel button.
+- `client/tests/lab-02/RouteGuard.test.tsx`: Implemented Change Requester session clear test.
+- `server/src/services/ticketNumber.ts`: New service to format ID to TKT-YYYY-00000X.
+- `server/src/app.ts`: Implemented POST /api/tickets with validations and transaction for ticket number generation.
+- `client/src/api.ts`: Added createTicket API integration.
+- `client/src/pages/CreateTicket.tsx`: Implemented UI form with active reference data fetch, React Hook Form validation, and success alert.
+- `server/tests/lab-02/create-ticket.api.test.ts`: Integration tests for valid and invalid ticket creation.
+- `server/tests/lab-02/ticket-number.unit.test.ts`: Unit test for ticket number formatting.
+- `client/tests/lab-02/CreateTicket.test.tsx`: UI tests checking field validation and duplicate click prevention.
+- `client/tests/lab-02/CreateTicket.style.test.tsx`: UI tests checking aria-describedby accessibility.
+
+### Database/dependencies
+- Migration: None
+- Dependency changes: None
+
+### Verification run
+- `cd client && npm test -- --run` -> Pass; 5 test files, 16 tests passed
+- `cd server && npm test -- --run` -> Pass; 8 test files, 13 tests passed
+
+### Evidence
+- Screenshot/artifact paths: None
+- Red test before implementation: API creation failed lacking route, UI submit failed lacking input fields.
+- Green test after implementation: All tests pass safely without uniqueness collision for multiple tickets.
+
+### Known risks / not completed
+- Attachments are not handled yet (deferred to Phase 5).
+- Phase 4 (My Tickets and Detail) is not started yet.
+
+### Next safe task
+- Merge feature/lab2-ticket-creation to lab2-staging and begin Phase 4: My Tickets and owned Ticket Detail.
