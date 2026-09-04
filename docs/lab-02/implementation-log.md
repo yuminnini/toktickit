@@ -198,7 +198,63 @@
 - All planned tests for Phase 5 (API-07, API-08, API-09, API-10, API-12, API-13, API-14, UI-08) verified and passing.
 
 ### Next safe task
-- Merge PR for `feature/lab2-attachments` into `lab2-staging`.
+- Merge PR for `feature/lab2-attachments` into `lab2-staging` (Completed in PR #20).
 - Proceed to **Phase 6: Zen Green reusable UI, accessibility, and responsive behavior (`feature/lab2-zen-green-responsive`)**.
+
+---
+
+## 2026-09-04 - Issue: Phase 6 - Zen Green Reusable UI, Accessibility & Responsive Behavior
+
+- Branch: `feature/lab2-zen-green-responsive`
+- Commit/PR: Pending PR into `lab2-staging`
+- Scope completed:
+  - Design Tokens & Theme Foundation:
+    - Updated `client/src/styles/theme.css` with full Zen Green tokens (`--color-primary: #006B3C`, `--color-secondary: #0B7A46`, `--color-pale-green: #EAF6EF`, `--color-bg: #F5F7F6`, `--color-surface: #FFFFFF`, `--color-surface-border: #E2E8E5`, `--color-text: #1F2E27`, `--color-error: #B3261E`, `--color-warning: #B7791F`, `--color-editable-bg: #FFFFFF`, `--color-editable-border: #C9D3CE`, `--color-readonly-bg: #F1F0E8`).
+    - Added badge tokens for all priority and status values.
+    - Added button hierarchy classes: `.btn-zen-primary`, `.btn-zen-secondary`, `.btn-zen-tertiary`, `.btn-zen-destructive`.
+    - Added form field states: `.form-control-zen`, `.form-control-readonly-zen`, `.zen-error-text`, `.required-marker`, and focus outline rings (2px `--color-secondary`).
+    - Configured `client/src/main.tsx` to import `bootstrap.min.css` before `theme.css` so Zen Green design rules and custom tokens take precedence.
+  - Screen & Component Refactoring:
+    - `Badge.tsx`: Replaced hardcoded inline hex colors with CSS classes (`.badge-zen`, `.priority-low`, `.priority-medium`, `.priority-high`, `.status-new`, etc.) driven by CSS variables. Guaranteed visible text labels for all variants (color never sole indicator).
+    - `AppShell.tsx`: Styled navbar with `--color-primary` background, active tab indicators, single DOM node for Requester info visible across desktop and mobile, and collapsible hamburger navigation toggler with `aria-label` and `aria-expanded`.
+    - `RequesterSelection.tsx`: Refactored to eliminate inline hex colors, apply `.btn-zen-primary` / `.btn-zen-secondary`, use native `<select>` with `.form-control-zen`, and apply pale-green banner tokens.
+    - `CreateTicket.tsx`: Implemented read-only context row with ivory background (`.form-control-readonly-zen`), responsive two-column classification, inline error icons (`⚠️`) with `.zen-error-text`, `aria-describedby` error linkage, and busy submitting button.
+    - `MyTickets.tsx`: Standardized search & filter controls with theme tokens; aligned responsive breakpoint strictly with `ui-spec.md` §8 (Desktop ≥992px uses `TicketTable` via `.d-none.d-lg-block`; Mobile/Tablet <992px uses `TicketCard` via `.d-lg-none`); styled Empty and No Results states with `.zen-card`.
+    - `TicketDetail.tsx`: Implemented read-only card styling (`.form-control-readonly-zen`), two-column layout on desktop, stacked on mobile/tablet, with standardized button hierarchy.
+    - `AttachmentPicker.tsx` & `AttachmentSection.tsx`: Added long filename truncation (`.text-truncate-filename`) with full name in `title` attribute, accessible hint text, icon button `aria-label` + `title`, and theme-styled soft-removal modal.
+  - Automated Tests:
+    - Updated `client/tests/lab-02/Badge.style.test.tsx` (8 tests) to verify `.badge-zen` class and priority/status token adherence.
+    - Created `client/tests/lab-02/ResponsiveLayout.test.tsx` (4 tests) covering desktop table vs mobile cards rendering, mobile navigation toggler `aria-expanded` interaction, filename truncation with title tooltip, and read-only field styling.
+- Requirements: `FR-08`, `FR-09`, `BR-12`, `AC-18`, `AC-22`, `STYLE-01`, `STYLE-02`, `STYLE-03`, `RESP-UNIT`, `§8.7`, `§8.8`.
+
+### Files changed
+- `client/src/styles/theme.css`: Complete Zen Green tokens, button hierarchy, field states, badges, and responsive utilities.
+- `client/src/main.tsx`: Reordered CSS imports (`bootstrap.min.css` followed by `theme.css`).
+- `client/src/components/Badge.tsx`: Clean token-driven badge component.
+- `client/src/components/AppShell.tsx`: Responsive navigation with accessible toggler and unified requester header element.
+- `client/src/pages/RequesterSelection.tsx`: Refactored with Zen Green tokens and button classes.
+- `client/src/pages/CreateTicket.tsx`: Refactored with token classes, ivory read-only fields, and responsive layout.
+- `client/src/pages/MyTickets.tsx`: Token styling, responsive table (≥992px) vs cards (<992px).
+- `client/src/pages/TicketDetail.tsx`: Ivory read-only styling, two-column desktop layout, and button hierarchy.
+- `client/src/components/TicketTable.tsx`: Styled with Zen Green tokens and tooltip for truncated summaries.
+- `client/src/components/TicketCard.tsx`: Styled with `.zen-card` and token links.
+- `client/src/components/AttachmentPicker.tsx`: Accessible hint text, filename ellipsis truncation, and title tooltips.
+- `client/src/components/AttachmentSection.tsx`: Token-styled attachment section, accessible actions, and soft-remove modal.
+- `client/tests/lab-02/Badge.style.test.tsx`: Verified `.badge-zen` class on all variants.
+- `client/tests/lab-02/ResponsiveLayout.test.tsx`: New responsive layout and accessibility test suite.
+- `docs/lab-02/tests.md`: Added `RESP-UNIT` test row.
+- `docs/lab-02/implementation-log.md`: Appended Phase 6 record.
+
+### Verification run
+- `cd server && npm test` -> Pass; 11 test files, 54 tests passed
+- `cd server && npm run build` -> Pass; TypeScript build succeeded (0 errors)
+- `cd client && npm test` -> Pass; 10 test files, 45 tests passed
+- `cd client && npm run build` -> Pass; TypeScript and Vite production build succeeded (0 errors)
+
+### Next safe task
+- Commit and push `feature/lab2-zen-green-responsive`.
+- Open Pull Request into `lab2-staging` linking the Phase 6 Issue.
+- Proceed to **Phase 7: E2E, screenshots, visual inspection, regression (`test/lab2-e2e-evidence`)**.
+
 
 

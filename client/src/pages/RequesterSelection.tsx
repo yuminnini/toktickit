@@ -35,8 +35,11 @@ export default function RequesterSelection() {
 
     return (
         <div className="container py-5" style={{ maxWidth: 480 }}>
-            <div className="card p-4 shadow-sm" style={{ border: "1px solid var(--color-surface-border)" }}>
-                <h1 className="h5 text-center mb-2" style={{ color: "var(--color-primary)" }}>
+            <div className="zen-card shadow-sm">
+                <div className="text-center mb-3">
+                    <span style={{ fontSize: "2rem" }}>👤</span>
+                </div>
+                <h1 className="h5 text-center mb-2">
                     Select Development Requester
                 </h1>
                 <p className="text-center text-muted small mb-4">
@@ -50,20 +53,24 @@ export default function RequesterSelection() {
                         <div className="spinner-border text-success mb-2" role="status">
                             <span className="visually-hidden">Loading...</span>
                         </div>
-                        <p className="text-muted mb-0">Loading requesters…</p>
+                        <p className="text-muted mb-0 small">Loading requesters…</p>
                     </div>
                 )}
 
                 {state === "empty" && (
-                    <p className="text-center text-muted py-3">
+                    <p className="text-center text-muted py-3 small">
                         No development requesters are available. Contact an administrator.
                     </p>
                 )}
 
                 {state === "error" && (
                     <div className="alert alert-danger" role="alert">
-                        <p className="mb-2">Unable to load requesters. Check your connection and try again.</p>
-                        <button className="btn btn-outline-danger btn-sm" onClick={loadRequesters}>
+                        <p className="mb-2 small">Unable to load requesters. Check your connection and try again.</p>
+                        <button
+                            type="button"
+                            className="btn btn-outline-danger btn-sm"
+                            onClick={loadRequesters}
+                        >
                             Retry
                         </button>
                     </div>
@@ -71,27 +78,30 @@ export default function RequesterSelection() {
 
                 {state === "ready" && (
                     <>
-                        <label htmlFor="requester-select" className="form-label fw-semibold">
-                            Development Requester <span className="text-danger">*</span>
-                        </label>
-                        <select
-                            id="requester-select"
-                            className="form-select mb-3"
-                            value={selectedId}
-                            onChange={(e) => setSelectedId(Number(e.target.value))}
-                        >
-                            <option value="" disabled>Choose a requester…</option>
-                            {requesters.map((r) => (
-                                <option key={r.id} value={r.id}>{r.name}</option>
-                            ))}
-                        </select>
+                        <div className="mb-3">
+                            <label htmlFor="requester-select" className="form-label fw-semibold small">
+                                Development Requester <span className="required-marker">*</span>
+                            </label>
+                            <select
+                                id="requester-select"
+                                className="form-select form-control-zen"
+                                value={selectedId}
+                                onChange={(e) => setSelectedId(Number(e.target.value))}
+                                aria-label="Development Requester selection"
+                            >
+                                <option value="" disabled>Choose a requester…</option>
+                                {requesters.map((r) => (
+                                    <option key={r.id} value={r.id}>{r.name}</option>
+                                ))}
+                            </select>
+                        </div>
 
                         <div
-                            className="alert alert-success small py-2"
+                            className="alert small py-2 px-3 mb-4"
                             role="status"
                             style={{
                                 background: "var(--color-pale-green)",
-                                borderColor: "var(--color-secondary)",
+                                border: "1px solid var(--badge-prio-low-border)",
                                 color: "var(--color-primary)",
                             }}
                         >
@@ -100,10 +110,10 @@ export default function RequesterSelection() {
                     </>
                 )}
 
-                <div className="d-flex justify-content-end gap-2 mt-3">
+                <div className="d-flex justify-content-end gap-2 mt-4 pt-2 border-top">
                     <button
                         type="button"
-                        className="btn btn-outline-secondary"
+                        className="btn-zen-secondary"
                         disabled={state !== "ready" || selectedId === ""}
                         onClick={() => setSelectedId("")}
                     >
@@ -111,8 +121,7 @@ export default function RequesterSelection() {
                     </button>
                     <button
                         type="button"
-                        className="btn btn-success"
-                        style={{ backgroundColor: "var(--color-primary)", borderColor: "var(--color-primary)" }}
+                        className="btn-zen-primary"
                         disabled={state !== "ready" || selectedId === ""}
                         onClick={handleContinue}
                     >

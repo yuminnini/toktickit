@@ -10,14 +10,14 @@ export default function TicketTable({ tickets }: TicketTableProps) {
   return (
     <div className="table-responsive ticket-table-container">
       <table className="table table-hover align-middle mb-0">
-        <thead className="table-light">
+        <thead style={{ backgroundColor: "var(--color-bg)", borderBottom: "2px solid var(--color-surface-border)" }}>
           <tr>
-            <th scope="col" style={{ width: "160px" }}>Ticket #</th>
-            <th scope="col">Summary</th>
-            <th scope="col" style={{ width: "160px" }}>Category</th>
-            <th scope="col" style={{ width: "110px" }}>Priority</th>
-            <th scope="col" style={{ width: "120px" }}>Status</th>
-            <th scope="col" style={{ width: "140px" }}>Created</th>
+            <th scope="col" style={{ width: "160px", color: "var(--color-text)", fontWeight: 600 }}>Ticket #</th>
+            <th scope="col" style={{ color: "var(--color-text)", fontWeight: 600 }}>Summary</th>
+            <th scope="col" style={{ width: "160px", color: "var(--color-text)", fontWeight: 600 }}>Category</th>
+            <th scope="col" style={{ width: "110px", color: "var(--color-text)", fontWeight: 600 }}>Priority</th>
+            <th scope="col" style={{ width: "120px", color: "var(--color-text)", fontWeight: 600 }}>Status</th>
+            <th scope="col" style={{ width: "140px", color: "var(--color-text)", fontWeight: 600 }}>Created</th>
           </tr>
         </thead>
         <tbody>
@@ -26,7 +26,8 @@ export default function TicketTable({ tickets }: TicketTableProps) {
               <td>
                 <Link
                   to={`/tickets/${ticket.id}`}
-                  className="fw-bold text-decoration-none font-monospace text-primary ticket-number-link"
+                  className="fw-bold text-decoration-none font-monospace ticket-number-link"
+                  style={{ color: "var(--color-primary)" }}
                 >
                   {ticket.ticketNumber}
                 </Link>
@@ -35,13 +36,14 @@ export default function TicketTable({ tickets }: TicketTableProps) {
                 <Link
                   to={`/tickets/${ticket.id}`}
                   className="text-dark text-decoration-none d-block text-truncate ticket-summary-link"
-                  style={{ maxWidth: "320px" }}
+                  style={{ maxWidth: "340px" }}
+                  title={ticket.summary}
                 >
                   {ticket.summary}
                 </Link>
               </td>
               <td>
-                <span className="text-muted ticket-category">{ticket.category}</span>
+                <span className="text-muted ticket-category small">{ticket.category}</span>
               </td>
               <td>
                 <Badge type="priority" value={ticket.requestedPriority} />
