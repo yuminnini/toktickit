@@ -11,43 +11,43 @@ a Business Rule.
 
 | Test ID | Type | Requirement/AC | What It Tests | Expected Result | Automated Test File | Final |
 |---|---|---|---|---|---|---|
-| UNIT-01 | Unit | BR-01 | Ticket Number generator produces `TKT-<year>-<id padded 6>` | Format matches regex exactly | `server/tests/lab-02/ticket-number.unit.test.ts` | Planned |
-| UNIT-02 | Unit | §5.3 (seed) | Running the Lab 2 seed twice | No duplicate Requesters/Related Systems created | `server/tests/lab-02/seed.unit.test.ts` | Planned |
-| UNIT-03 | Unit | §5 (data model) | `RequesterUser.email` unique constraint | Creating a second Requester with a duplicate email is rejected by Prisma/PostgreSQL | `server/tests/lab-02/requester-constraint.unit.test.ts` | Planned |
-| API-01 | API | AC-01 | `POST /api/tickets` with valid body | 201, response includes generated `ticketNumber` | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
-| API-02 | API | AC-03, BR-13 | `GET /api/tickets/:id` with a `requesterId` that doesn't own it | 404, no Ticket data leaked | `server/tests/lab-02/ticket-detail.api.test.ts` | Planned |
-| API-03 | API | AC-04, BR-08 | `POST /api/tickets` with empty `summary` | 400, `fields.summary` message present | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
-| API-04 | API | BR-08 | `POST /api/tickets` with `summary` at 151 chars (boundary) | 400 validation error | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
-| API-05 | API | AC-09 | `GET /api/tickets` with `page=2&pageSize=10` on 15 seeded tickets | 200, returns tickets 11-15, correct `totalPages` | `server/tests/lab-02/my-tickets.api.test.ts` | Planned |
-| API-06 | API | BR-07 | `GET /api/tickets` with invalid `sort=xyz` | 200, silently falls back to `createdAt desc` (no 400) | `server/tests/lab-02/my-tickets.api.test.ts` | Planned |
+| UNIT-01 | Unit | BR-01 | Ticket Number generator produces `TKT-<year>-<id padded 6>` | Format matches regex exactly | `server/tests/lab-02/ticket-number.unit.test.ts` | Pass |
+| UNIT-02 | Unit | §5.3 (seed) | Running the Lab 2 seed twice | No duplicate Requesters/Related Systems created | `server/tests/lab-02/seed.unit.test.ts` | Pass |
+| UNIT-03 | Unit | §5 (data model) | `RequesterUser.email` unique constraint | Creating a second Requester with a duplicate email is rejected by Prisma/PostgreSQL | `server/tests/lab-02/requester-constraint.unit.test.ts` | Pass |
+| API-01 | API | AC-01 | `POST /api/tickets` with valid body | 201, response includes generated `ticketNumber` | `server/tests/lab-02/create-ticket.api.test.ts` | Pass |
+| API-02 | API | AC-03, BR-13 | `GET /api/tickets/:id` with a `requesterId` that doesn't own it | 404, no Ticket data leaked | `server/tests/lab-02/ticket-detail.api.test.ts` | Pass |
+| API-03 | API | AC-04, BR-08 | `POST /api/tickets` with empty `summary` | 400, `fields.summary` message present | `server/tests/lab-02/create-ticket.api.test.ts` | Pass |
+| API-04 | API | BR-08 | `POST /api/tickets` with `summary` at 151 chars (boundary) | 400 validation error | `server/tests/lab-02/create-ticket.api.test.ts` | Pass |
+| API-05 | API | AC-09 | `GET /api/tickets` with `page=2&pageSize=10` on 15 seeded tickets | 200, returns tickets 11-15, correct `totalPages` | `server/tests/lab-02/my-tickets.api.test.ts` | Pass |
+| API-06 | API | BR-07 | `GET /api/tickets` with invalid `sort=xyz` | 200, silently falls back to `createdAt desc` (no 400) | `server/tests/lab-02/my-tickets.api.test.ts` | Pass |
 | API-07 | API | AC-11 | `POST /api/tickets/:id/attachments` with a valid 1 MB PNG | 201, attachment metadata returned | `server/tests/lab-02/attachments.api.test.ts` | Planned |
 | API-08 | API | AC-13 | Uploading a 6th attachment when 5 active already exist | 409 `ATTACHMENT_LIMIT` | `server/tests/lab-02/attachments.api.test.ts` | Planned |
 | API-09 | API | AC-14 | `DELETE /api/attachments/:id` with a reason | 200, `removedAt`/`removalReason` set | `server/tests/lab-02/attachments.api.test.ts` | Planned |
 | API-10 | API | AC-15 | `GET /api/attachments/:id/download` on a removed attachment | 404 (not 200, not distinguishable from non-existent) | `server/tests/lab-02/attachments.api.test.ts` | Planned |
-| API-11 | API | BR-11 | `GET /api/requesters` | 200, inactive seeded Requester is absent from the list | `server/tests/lab-02/requesters.api.test.ts` | Planned |
+| API-11 | API | BR-11 | `GET /api/requesters` | 200, inactive seeded Requester is absent from the list | `server/tests/lab-02/requesters.api.test.ts` | Pass |
 | API-12 | API | AC-03, BR-13 | `GET /api/attachments/:id` (metadata) where the attachment belongs to a different requester | 404, no metadata leaked | `server/tests/lab-02/attachments.api.test.ts` | Planned |
 | API-13 | API | AC-03, BR-13 | `GET /api/attachments/:id/download` where the attachment belongs to a different requester | 404 | `server/tests/lab-02/attachments.api.test.ts` | Planned |
 | API-14 | API | AC-03, BR-13 | `DELETE /api/attachments/:id` where the attachment belongs to a different requester | 404, attachment is not modified/removed | `server/tests/lab-02/attachments.api.test.ts` | Planned |
-| API-15 | API | BR-11 | `POST /api/tickets` with `requesterId` belonging to a seeded **inactive** Requester | 400, bad-requester error (not 201) | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
-| API-16 | API | AC-19 | `GET /api/tickets?search=laptop` on a mix of matching/non-matching seeded tickets | 200, only tickets with "laptop" in summary/ticketNumber returned | `server/tests/lab-02/my-tickets.api.test.ts` | Planned |
-| API-17 | API | AC-20 | `GET /api/tickets?categoryId=<id>&requestedPriority=HIGH` | 200, only tickets matching **both** filters returned | `server/tests/lab-02/my-tickets.api.test.ts` | Planned |
-| API-18 | API | AC-21 | `GET /api/tickets?sort=ticketNumber&order=asc` | 200, results ordered ascending by ticketNumber | `server/tests/lab-02/my-tickets.api.test.ts` | Planned |
-| UI-01 | UI | AC-02 | Navigating to My Tickets with no Requester selected | Redirected to Requester Selection screen | `client/tests/lab-02/RouteGuard.test.tsx` | Planned |
-| UI-02 | UI | AC-04 | Submitting Create Ticket with empty Summary | Field-level message shown; `checkSystem`/create API not called | `client/tests/lab-02/CreateTicket.test.tsx` | Planned |
-| UI-03 | UI | AC-05 | Clicking Submit twice quickly | Button disabled after first click; only one API call fires | `client/tests/lab-02/CreateTicket.test.tsx` | Planned |
-| UI-04 | UI | AC-06 | Submitting a valid form when the create API rejects (mocked) | Error message shown; all field values still present in inputs | `client/tests/lab-02/CreateTicket.test.tsx` | Planned |
-| UI-05 | UI | AC-07 | Requester with 0 tickets opens My Tickets (mocked empty response) | "Empty" state with Create Ticket CTA, not "No results" | `client/tests/lab-02/MyTickets.test.tsx` | Planned |
-| UI-06 | UI | AC-08 | Requester with tickets applies a filter matching none (mocked) | "No results" state with Clear Filters CTA | `client/tests/lab-02/MyTickets.test.tsx` | Planned |
-| UI-07 | UI | AC-10 | Mocked Requester switch while My Tickets is open | Old list cleared, new Requester's tickets fetched and shown | `client/tests/lab-02/MyTickets.test.tsx` | Planned |
+| API-15 | API | BR-11 | `POST /api/tickets` with `requesterId` belonging to a seeded **inactive** Requester | 400, bad-requester error (not 201) | `server/tests/lab-02/create-ticket.api.test.ts` | Pass |
+| API-16 | API | AC-19 | `GET /api/tickets?search=laptop` on a mix of matching/non-matching seeded tickets | 200, only tickets with "laptop" in summary/ticketNumber returned | `server/tests/lab-02/my-tickets.api.test.ts` | Pass |
+| API-17 | API | AC-20 | `GET /api/tickets?categoryId=<id>&requestedPriority=HIGH` | 200, only tickets matching **both** filters returned | `server/tests/lab-02/my-tickets.api.test.ts` | Pass |
+| API-18 | API | AC-21 | `GET /api/tickets?sort=ticketNumber&order=asc` | 200, results ordered ascending by ticketNumber | `server/tests/lab-02/my-tickets.api.test.ts` | Pass |
+| UI-01 | UI | AC-02 | Navigating to My Tickets with no Requester selected | Redirected to Requester Selection screen | `client/tests/lab-02/RouteGuard.test.tsx` | Pass |
+| UI-02 | UI | AC-04 | Submitting Create Ticket with empty Summary | Field-level message shown; `checkSystem`/create API not called | `client/tests/lab-02/CreateTicket.test.tsx` | Pass |
+| UI-03 | UI | AC-05 | Clicking Submit twice quickly | Button disabled after first click; only one API call fires | `client/tests/lab-02/CreateTicket.test.tsx` | Pass |
+| UI-04 | UI | AC-06 | Submitting a valid form when the create API rejects (mocked) | Error message shown; all field values still present in inputs | `client/tests/lab-02/CreateTicket.test.tsx` | Pass |
+| UI-05 | UI | AC-07 | Requester with 0 tickets opens My Tickets (mocked empty response) | "Empty" state with Create Ticket CTA, not "No results" | `client/tests/lab-02/MyTickets.test.tsx` | Pass |
+| UI-06 | UI | AC-08 | Requester with tickets applies a filter matching none (mocked) | "No results" state with Clear Filters CTA | `client/tests/lab-02/MyTickets.test.tsx` | Pass |
+| UI-07 | UI | AC-10 | Mocked Requester switch while My Tickets is open | Old list cleared, new Requester's tickets fetched and shown | `client/tests/lab-02/MyTickets.test.tsx` | Pass |
 | UI-08 | UI | AC-12 | Selecting a `.exe` file in the attachment picker | Rejected client-side with message; no upload request sent | `client/tests/lab-02/AttachmentSection.test.tsx` | Planned |
-| UI-09 | UI | AC-16 | Requester Selection screen with 0 active requesters (mocked) | Safe empty state, not a blank/broken dropdown | `client/tests/lab-02/RequesterSelection.test.tsx` | Planned |
-| UI-10 | UI | AC-17 | Requester Selection screen when `GET /api/requesters` fails (mocked) | Safe error state, not a crash or infinite spinner | `client/tests/lab-02/RequesterSelection.test.tsx` | Planned |
-| UI-11 | UI | AC-09 | Clicking "Next" on My Tickets pagination (mocked page-1 API response) | UI calls list API with `page=2`; displays the returned second-page tickets, "Previous" becomes enabled | `client/tests/lab-02/MyTickets.test.tsx` | Planned |
-| STYLE-01 | UI Style | §8.3, §8.8 | Required-field asterisk and validation message placement on Create Ticket | Asterisk present on required labels; error renders directly below its field | `client/tests/lab-02/CreateTicket.style.test.tsx` | Planned |
-| STYLE-02 | UI Style | §8.8 | Badge component renders for each `requestedPriority`/`currentStatus` value | Correct color token class applied per value, no reliance on color alone (text label present) | `client/tests/lab-02/Badge.style.test.tsx` | Planned |
-| STYLE-03 | UI Style | AC-22 | Submit Create Ticket with Summary empty | Summary input's `aria-describedby` attribute references the rendered error message's `id` | `client/tests/lab-02/CreateTicket.style.test.tsx` | Planned |
-| API-19 | API | BR-08 | `POST /api/tickets` with empty `description` (after trim) | 400, `fields.description` message present | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
-| API-20 | API | BR-08 | `POST /api/tickets` with `description` at 2001 chars (boundary, over the 2000 limit) | 400 validation error | `server/tests/lab-02/create-ticket.api.test.ts` | Planned |
+| UI-09 | UI | AC-16 | Requester Selection screen with 0 active requesters (mocked) | Safe empty state, not a blank/broken dropdown | `client/tests/lab-02/RequesterSelection.test.tsx` | Pass |
+| UI-10 | UI | AC-17 | Requester Selection screen when `GET /api/requesters` fails (mocked) | Safe error state, not a crash or infinite spinner | `client/tests/lab-02/RequesterSelection.test.tsx` | Pass |
+| UI-11 | UI | AC-09 | Clicking "Next" on My Tickets pagination (mocked page-1 API response) | UI calls list API with `page=2`; displays the returned second-page tickets, "Previous" becomes enabled | `client/tests/lab-02/MyTickets.test.tsx` | Pass |
+| STYLE-01 | UI Style | §8.3, §8.8 | Required-field asterisk and validation message placement on Create Ticket | Asterisk present on required labels; error renders directly below its field | `client/tests/lab-02/CreateTicket.style.test.tsx` | Pass |
+| STYLE-02 | UI Style | §8.8 | Badge component renders for each `requestedPriority`/`currentStatus` value | Correct color token class applied per value, no reliance on color alone (text label present) | `client/tests/lab-02/Badge.style.test.tsx` | Pass |
+| STYLE-03 | UI Style | AC-22 | Submit Create Ticket with Summary empty | Summary input's `aria-describedby` attribute references the rendered error message's `id` | `client/tests/lab-02/CreateTicket.style.test.tsx` | Pass |
+| API-19 | API | BR-08 | `POST /api/tickets` with empty `description` (after trim) | 400, `fields.description` message present | `server/tests/lab-02/create-ticket.api.test.ts` | Pass |
+| API-20 | API | BR-08 | `POST /api/tickets` with `description` at 2001 chars (boundary, over the 2000 limit) | 400 validation error | `server/tests/lab-02/create-ticket.api.test.ts` | Pass |
 | RESP-01 | Responsive | AC-18, §8.7 | Playwright screenshot of Create Ticket, My Tickets, Ticket Detail at 375px | No horizontal scroll, no clipped/overlapping elements (manual checklist §4 below) | `e2e/lab-02/responsive.spec.ts` | Planned |
 | RESP-02 | Responsive | §8.7 | Same 3 screens at 1024px (tablet) and 1280px (desktop) | Layout matches `ui-spec.md` breakpoint rules | `e2e/lab-02/responsive.spec.ts` | Planned |
 | E2E-01 | E2E | AC-01, AC-11 | Select Requester → Create Ticket with 1 attachment → see success | Ticket Number shown; ticket appears in My Tickets after navigating there | `e2e/lab-02/requester-ticket-flow.spec.ts` | Planned |
