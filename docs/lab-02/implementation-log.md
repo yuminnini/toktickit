@@ -130,3 +130,58 @@
 ### Next safe task
 - Begin Phase 5: Attachment lifecycle end-to-end (`feature/lab2-attachments`).
 
+## 2026-09-04 - Phase 5: Attachment lifecycle end-to-end
+
+- Branch: `feature/lab2-attachments`
+- Commit/PR: Pending PR to `lab2-staging`
+- Scope completed: Implemented the complete attachment lifecycle for tickets.
+  - Added server-side storage service (`server/src/services/attachmentStorage.ts`) with private storage directory, UUID-based file naming, extension and MIME type whitelist validation (`.jpg`, `.jpeg`, `.png`, `.webp`, `.pdf`), max 5 MB size limit, and compensation cleanup on database insertion failure.
+  - Implemented 4 REST endpoints in `server/src/app.ts`:
+    - `POST /api/tickets/:id/attachments`: multipart single-file upload, owned ticket check, concurrency-safe 5 active attachments limit (409 `ATTACHMENT_LIMIT`), stored filename kept private from response.
+    - `GET /api/attachments/:id`: metadata retrieval, owned-only check via parent ticket, works for both active and soft-removed attachments.
+    - `GET /api/attachments/:id/download`: active attachment download only (`removedAt: null`), owned-only check, RFC 5987 safe `Content-Disposition`, returns 404 for removed attachments (indistinguishable from non-existent).
+    - `DELETE /api/attachments/:id`: soft-removal requiring trimmed reason (1-500 characters), sets `removedAt` and `removalReason` without physically deleting database row, returns 409 if already removed; soft-removed attachments free up quota toward the 5-file active limit.
+  - Frontend integration:
+    - Updated `client/src/api.ts` with `uploadAttachment`, `removeAttachment`, and `getAttachmentDownloadUrl`.
+    - Created `AttachmentPicker.tsx` with client-side file validation (rejects `.exe` and files > 5 MB with inline error) and staged file management.
+    - Created `AttachmentSection.tsx` displaying active and soft-removed attachments, download action, soft-remove confirmation modal with reason input, and single-file upload up to 5 active attachments limit.
+    - Integrated `AttachmentPicker` into `CreateTicket.tsx` (staged upload after ticket creation with partial failure reporting).
+    - Integrated `AttachmentSection` into `TicketDetail.tsx` replacing previous placeholder.
+  - Automated tests:
+    - Added `server/tests/lab-02/attachments.api.test.ts` covering API-07, API-08, API-09, API-10, API-12, API-13, API-14, file validation, quota freeing, and disk cleanup.
+    - Added `client/tests/lab-02/AttachmentSection.test.tsx` covering UI-08 (.exe rejection), file size rejection, rendering, download, removal modal, and quota limit.
+- Requirements: `FR-07`, `BR-04`, `BR-06`, `BR-10`, `AC-11`, `AC-12`, `AC-13`, `AC-14`, `AC-15`
+
+### Files changed
+- `server/package.json`, `server/package-lock.json`: Added `multer` (v2.3.0) and `@types/multer` (v2.2.0).
+- `.gitignore`: Added `uploads/` and `server/uploads/` to ignore stored attachment files.
+- `server/src/services/attachmentStorage.ts`: File storage service with validation, UUID naming, and compensation deletion.
+- `server/src/app.ts`: Implemented upload, metadata, download, and soft-remove attachment routes.
+- `server/tests/lab-02/attachments.api.test.ts`: Integration tests for attachment lifecycle (21 tests).
+- `client/src/api.ts`: Added attachment helper functions (`uploadAttachment`, `removeAttachment`, `getAttachmentDownloadUrl`).
+- `client/src/components/AttachmentPicker.tsx`: Reusable picker component with client-side validation.
+- `client/src/components/AttachmentSection.tsx`: Complete attachment management section for ticket details.
+- `client/src/pages/CreateTicket.tsx`: Added staged attachments and sequential upload.
+- `client/src/pages/TicketDetail.tsx`: Integrated `AttachmentSection` with reload callback.
+- `client/tests/lab-02/AttachmentSection.test.tsx`: Client unit tests for attachment components and UI-08.
+- `docs/lab-02/tests.md`: Marked API-07..10, API-12..14, and UI-08 as Pass.
+- `docs/lab-02/implementation-log.md`: Appended Phase 5 implementation entry.
+
+### Database/dependencies
+- Dependencies: `multer` and `@types/multer` installed in server.
+- Database: Existing `Attachment` Prisma model utilized. No new migrations needed.
+
+### Verification run
+- `cd server && npm test` -> Pass; 11 test files, 50 tests passed
+- `cd server && npm run build` -> Pass; TypeScript compilation succeeded
+- `cd client && npm test` -> Pass; 9 test files, 39 tests passed
+- `cd client && npm run build` -> Pass; TypeScript and Vite build succeeded
+
+### Evidence
+- All planned tests for Phase 5 (API-07, API-08, API-09, API-10, API-12, API-13, API-14, UI-08) verified and passing.
+
+### Next safe task
+- Create PR from `feature/lab2-attachments` into `lab2-staging` for review and merge.
+- Proceed to **Phase 6: Zen Green reusable UI, accessibility, and responsive behavior (`feature/lab2-zen-green-responsive`)**.
+
+

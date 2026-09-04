@@ -204,4 +204,64 @@ export async function fetchTicketDetail(
     throw err;
   }
   return res.json();
+}
+
+export async function uploadAttachment(
+  ticketId: number,
+  requesterId: number,
+  file: File
+): Promise<AttachmentItem> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(
+    `${API_URL}/api/tickets/${ticketId}/attachments?requesterId=${requesterId}`,
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to upload attachment") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export async function removeAttachment(
+  attachmentId: number,
+  requesterId: number,
+  reason: string
+): Promise<AttachmentItem> {
+  const res = await fetch(
+    `${API_URL}/api/attachments/${attachmentId}?requesterId=${requesterId}`,
+    {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    }
+  );
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to remove attachment") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export function getAttachmentDownloadUrl(attachmentId: number, requesterId: number): string {
+  return `${API_URL}/api/attachments/${attachmentId}/download?requesterId=${requesterId}`;
 }

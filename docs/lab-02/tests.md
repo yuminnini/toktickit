@@ -20,14 +20,14 @@ a Business Rule.
 | API-04 | API | BR-08 | `POST /api/tickets` with `summary` at 151 chars (boundary) | 400 validation error | `server/tests/lab-02/create-ticket.api.test.ts` | Pass |
 | API-05 | API | AC-09 | `GET /api/tickets` with `page=2&pageSize=10` on 15 seeded tickets | 200, returns tickets 11-15, correct `totalPages` | `server/tests/lab-02/my-tickets.api.test.ts` | Pass |
 | API-06 | API | BR-07 | `GET /api/tickets` with invalid `sort=xyz` | 200, silently falls back to `createdAt desc` (no 400) | `server/tests/lab-02/my-tickets.api.test.ts` | Pass |
-| API-07 | API | AC-11 | `POST /api/tickets/:id/attachments` with a valid 1 MB PNG | 201, attachment metadata returned | `server/tests/lab-02/attachments.api.test.ts` | Planned |
-| API-08 | API | AC-13 | Uploading a 6th attachment when 5 active already exist | 409 `ATTACHMENT_LIMIT` | `server/tests/lab-02/attachments.api.test.ts` | Planned |
-| API-09 | API | AC-14 | `DELETE /api/attachments/:id` with a reason | 200, `removedAt`/`removalReason` set | `server/tests/lab-02/attachments.api.test.ts` | Planned |
-| API-10 | API | AC-15 | `GET /api/attachments/:id/download` on a removed attachment | 404 (not 200, not distinguishable from non-existent) | `server/tests/lab-02/attachments.api.test.ts` | Planned |
+| API-07 | API | AC-11 | `POST /api/tickets/:id/attachments` with a valid 1 MB PNG | 201, attachment metadata returned | `server/tests/lab-02/attachments.api.test.ts` | Pass |
+| API-08 | API | AC-13 | Uploading a 6th attachment when 5 active already exist | 409 `ATTACHMENT_LIMIT` | `server/tests/lab-02/attachments.api.test.ts` | Pass |
+| API-09 | API | AC-14 | `DELETE /api/attachments/:id` with a reason | 200, `removedAt`/`removalReason` set | `server/tests/lab-02/attachments.api.test.ts` | Pass |
+| API-10 | API | AC-15 | `GET /api/attachments/:id/download` on a removed attachment | 404 (not 200, not distinguishable from non-existent) | `server/tests/lab-02/attachments.api.test.ts` | Pass |
 | API-11 | API | BR-11 | `GET /api/requesters` | 200, inactive seeded Requester is absent from the list | `server/tests/lab-02/requesters.api.test.ts` | Pass |
-| API-12 | API | AC-03, BR-13 | `GET /api/attachments/:id` (metadata) where the attachment belongs to a different requester | 404, no metadata leaked | `server/tests/lab-02/attachments.api.test.ts` | Planned |
-| API-13 | API | AC-03, BR-13 | `GET /api/attachments/:id/download` where the attachment belongs to a different requester | 404 | `server/tests/lab-02/attachments.api.test.ts` | Planned |
-| API-14 | API | AC-03, BR-13 | `DELETE /api/attachments/:id` where the attachment belongs to a different requester | 404, attachment is not modified/removed | `server/tests/lab-02/attachments.api.test.ts` | Planned |
+| API-12 | API | AC-03, BR-13 | `GET /api/attachments/:id` (metadata) where the attachment belongs to a different requester | 404, no metadata leaked | `server/tests/lab-02/attachments.api.test.ts` | Pass |
+| API-13 | API | AC-03, BR-13 | `GET /api/attachments/:id/download` where the attachment belongs to a different requester | 404 | `server/tests/lab-02/attachments.api.test.ts` | Pass |
+| API-14 | API | AC-03, BR-13 | `DELETE /api/attachments/:id` where the attachment belongs to a different requester | 404, attachment is not modified/removed | `server/tests/lab-02/attachments.api.test.ts` | Pass |
 | API-15 | API | BR-11 | `POST /api/tickets` with `requesterId` belonging to a seeded **inactive** Requester | 400, bad-requester error (not 201) | `server/tests/lab-02/create-ticket.api.test.ts` | Pass |
 | API-16 | API | AC-19 | `GET /api/tickets?search=laptop` on a mix of matching/non-matching seeded tickets | 200, only tickets with "laptop" in summary/ticketNumber returned | `server/tests/lab-02/my-tickets.api.test.ts` | Pass |
 | API-17 | API | AC-20 | `GET /api/tickets?categoryId=<id>&requestedPriority=HIGH` | 200, only tickets matching **both** filters returned | `server/tests/lab-02/my-tickets.api.test.ts` | Pass |
@@ -39,7 +39,7 @@ a Business Rule.
 | UI-05 | UI | AC-07 | Requester with 0 tickets opens My Tickets (mocked empty response) | "Empty" state with Create Ticket CTA, not "No results" | `client/tests/lab-02/MyTickets.test.tsx` | Pass |
 | UI-06 | UI | AC-08 | Requester with tickets applies a filter matching none (mocked) | "No results" state with Clear Filters CTA | `client/tests/lab-02/MyTickets.test.tsx` | Pass |
 | UI-07 | UI | AC-10 | Mocked Requester switch while My Tickets is open | Old list cleared, new Requester's tickets fetched and shown | `client/tests/lab-02/MyTickets.test.tsx` | Pass |
-| UI-08 | UI | AC-12 | Selecting a `.exe` file in the attachment picker | Rejected client-side with message; no upload request sent | `client/tests/lab-02/AttachmentSection.test.tsx` | Planned |
+| UI-08 | UI | AC-12 | Selecting a `.exe` file in the attachment picker | Rejected client-side with message; no upload request sent | `client/tests/lab-02/AttachmentSection.test.tsx` | Pass |
 | UI-09 | UI | AC-16 | Requester Selection screen with 0 active requesters (mocked) | Safe empty state, not a blank/broken dropdown | `client/tests/lab-02/RequesterSelection.test.tsx` | Pass |
 | UI-10 | UI | AC-17 | Requester Selection screen when `GET /api/requesters` fails (mocked) | Safe error state, not a crash or infinite spinner | `client/tests/lab-02/RequesterSelection.test.tsx` | Pass |
 | UI-11 | UI | AC-09 | Clicking "Next" on My Tickets pagination (mocked page-1 API response) | UI calls list API with `page=2`; displays the returned second-page tickets, "Previous" becomes enabled | `client/tests/lab-02/MyTickets.test.tsx` | Pass |

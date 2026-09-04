@@ -1,8 +1,9 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useRequester } from "../context/RequesterContext";
 import { fetchTicketDetail, TicketDetail as TicketDetailType } from "../api";
 import Badge from "../components/Badge";
+import { AttachmentSection } from "../components/AttachmentSection";
 
 export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();
@@ -16,46 +17,53 @@ export default function TicketDetail() {
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    if (!id || !requester?.id) return;
+  const loadTicket = useCallback(
+    (signal?: AbortSignal, showSpinner = true) => {
+      if (!id || !requester?.id) return;
 
+      if (showSpinner) {
+        setLoading(true);
+      }
+      setError(null);
+      setIsNotFound(false);
+
+      fetchTicketDetail(Number(id), requester.id, signal)
+        .then((data) => {
+          if (!signal?.aborted) {
+            setTicket(data);
+          }
+        })
+        .catch((err: Error & { status?: number }) => {
+          if (!signal?.aborted) {
+            if (err.status === 404) {
+              setIsNotFound(true);
+            } else {
+              setError(err.message || "Unable to load ticket details");
+            }
+          }
+        })
+        .finally(() => {
+          if (!signal?.aborted) {
+            setLoading(false);
+          }
+        });
+    },
+    [id, requester?.id]
+  );
+
+  useEffect(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
-
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    setTicket(null);
-    setLoading(true);
-    setError(null);
-    setIsNotFound(false);
-
-    fetchTicketDetail(Number(id), requester.id, controller.signal)
-      .then((data) => {
-        if (!controller.signal.aborted) {
-          setTicket(data);
-        }
-      })
-      .catch((err: Error & { status?: number }) => {
-        if (!controller.signal.aborted) {
-          if (err.status === 404) {
-            setIsNotFound(true);
-          } else {
-            setError(err.message || "Unable to load ticket details");
-          }
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
+    loadTicket(controller.signal, true);
 
     return () => {
       controller.abort();
     };
-  }, [id, requester?.id]);
+  }, [loadTicket]);
 
   if (loading) {
     return (
@@ -166,33 +174,12 @@ export default function TicketDetail() {
           </div>
 
           {/* Attachments Section */}
-          <div className="card shadow-sm border">
-            <div className="card-body p-4">
-              <h6 className="card-title fw-bold mb-3">
-                Attachments ({ticket.attachments?.length || 0})
-              </h6>
-
-              {ticket.attachments && ticket.attachments.length > 0 ? (
-                <ul className="list-group list-group-flush">
-                  {ticket.attachments.map((att) => (
-                    <li
-                      key={att.id}
-                      className="list-group-item d-flex justify-content-between align-items-center px-0 py-2"
-                    >
-                      <span className="text-truncate" style={{ maxWidth: "300px" }}>
-                        📎 {att.originalName}
-                      </span>
-                      <span className="badge bg-light text-muted border">
-                        {Math.round(att.sizeBytes / 1024)} KB
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-muted small mb-0">No attachments uploaded.</p>
-              )}
-            </div>
-          </div>
+          <AttachmentSection
+            ticketId={ticket.id}
+            requesterId={requester!.id}
+            attachments={ticket.attachments || []}
+            onAttachmentChanged={() => loadTicket(undefined, false)}
+          />
         </div>
 
         {/* Right Column: Metadata Details */}

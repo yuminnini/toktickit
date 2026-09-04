@@ -1,9 +1,16 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
+import path from "node:path";
+import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import { Priority, TicketStatus, Prisma } from "@prisma/client";
 import { getPrisma } from "./prisma.js";
 import { formatTicketNumber } from "./services/ticketNumber.js";
+import {
+  upload,
+  deleteFileFromStorage,
+  getUploadDir,
+} from "./services/attachmentStorage.js";
 
 export const app = express();
 
@@ -393,6 +400,378 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
     res.status(201).json(ticket);
   } catch {
     res.status(500).json({ error: "INTERNAL_ERROR", message: "Unable to create ticket" });
+  }
+});
+
+// Upload Attachment (one file per call)
+app.post("/api/tickets/:id/attachments", (req: Request, res: Response) => {
+  upload.single("file")(req, res, async (err: any) => {
+    if (err) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        res.status(400).json({
+          error: "FILE_TOO_LARGE",
+          message: "File exceeds the 5 MB limit",
+        });
+        return;
+      }
+      if (err.message === "UNSUPPORTED_TYPE") {
+        res.status(400).json({
+          error: "UNSUPPORTED_TYPE",
+          message: "Allowed types: JPG, JPEG, PNG, WEBP, PDF",
+        });
+        return;
+      }
+      res.status(400).json({
+        error: "UPLOAD_ERROR",
+        message: err.message || "Failed to upload file",
+      });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({
+        error: "NO_FILE",
+        message: "File is required",
+      });
+      return;
+    }
+
+    const filenameToDelete = req.file.filename;
+
+    try {
+      const ticketId = Number(req.params.id);
+      const { requesterId } = req.query;
+
+      if (!Number.isInteger(ticketId)) {
+        await deleteFileFromStorage(filenameToDelete);
+        res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
+        return;
+      }
+
+      const numRequesterId = Number(requesterId);
+      if (!requesterId || !Number.isInteger(numRequesterId)) {
+        await deleteFileFromStorage(filenameToDelete);
+        res.status(400).json({
+          error: "MISSING_REQUESTER",
+          message: "requesterId is required",
+        });
+        return;
+      }
+
+      const prisma = getPrisma();
+
+      // Check active requester
+      const activeRequester = await prisma.requesterUser.findFirst({
+        where: { id: numRequesterId, active: true },
+        select: { id: true },
+      });
+
+      if (!activeRequester) {
+        await deleteFileFromStorage(filenameToDelete);
+        res.status(400).json({
+          error: "BAD_REQUESTER",
+          message: "Invalid or inactive requester",
+        });
+        return;
+      }
+
+      // Check ticket ownership
+      const ticket = await prisma.ticket.findFirst({
+        where: { id: ticketId, requesterId: numRequesterId },
+        select: { id: true },
+      });
+
+      if (!ticket) {
+        await deleteFileFromStorage(filenameToDelete);
+        res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
+        return;
+      }
+
+      // Concurrency-safe check of active attachments limit (max 5)
+      const activeCount = await prisma.attachment.count({
+        where: { ticketId, removedAt: null },
+      });
+
+      if (activeCount >= 5) {
+        await deleteFileFromStorage(filenameToDelete);
+        res.status(409).json({
+          error: "ATTACHMENT_LIMIT",
+          message: "This ticket already has 5 active attachments",
+        });
+        return;
+      }
+
+      // Insert attachment record
+      const attachment = await prisma.attachment.create({
+        data: {
+          ticketId,
+          originalName: req.file.originalname,
+          storedFilename: req.file.filename,
+          mimeType: req.file.mimetype,
+          sizeBytes: req.file.size,
+        },
+        select: {
+          id: true,
+          originalName: true,
+          mimeType: true,
+          sizeBytes: true,
+          uploadedAt: true,
+          removedAt: true,
+          removalReason: true,
+        },
+      });
+
+      res.status(201).json(attachment);
+    } catch {
+      await deleteFileFromStorage(filenameToDelete);
+      res.status(500).json({
+        error: "INTERNAL_ERROR",
+        message: "Unable to save attachment",
+      });
+    }
+  });
+});
+
+// Get Attachment Metadata
+app.get("/api/attachments/:id", async (req: Request, res: Response) => {
+  try {
+    const attachmentId = Number(req.params.id);
+    const { requesterId } = req.query;
+
+    if (!Number.isInteger(attachmentId)) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Attachment not found" });
+      return;
+    }
+
+    const numRequesterId = Number(requesterId);
+    if (!requesterId || !Number.isInteger(numRequesterId)) {
+      res.status(400).json({
+        error: "MISSING_REQUESTER",
+        message: "requesterId is required",
+      });
+      return;
+    }
+
+    const prisma = getPrisma();
+
+    // Check active requester
+    const activeRequester = await prisma.requesterUser.findFirst({
+      where: { id: numRequesterId, active: true },
+      select: { id: true },
+    });
+
+    if (!activeRequester) {
+      res.status(400).json({
+        error: "BAD_REQUESTER",
+        message: "Invalid or inactive requester",
+      });
+      return;
+    }
+
+    // Ownership check via parent ticket
+    const attachment = await prisma.attachment.findFirst({
+      where: {
+        id: attachmentId,
+        ticket: { requesterId: numRequesterId },
+      },
+      select: {
+        id: true,
+        originalName: true,
+        mimeType: true,
+        sizeBytes: true,
+        uploadedAt: true,
+        removedAt: true,
+        removalReason: true,
+      },
+    });
+
+    if (!attachment) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Attachment not found" });
+      return;
+    }
+
+    res.status(200).json(attachment);
+  } catch {
+    res.status(500).json({
+      error: "INTERNAL_ERROR",
+      message: "Unable to load attachment metadata",
+    });
+  }
+});
+
+// Download Attachment (active only, owned only)
+app.get("/api/attachments/:id/download", async (req: Request, res: Response) => {
+  try {
+    const attachmentId = Number(req.params.id);
+    const { requesterId } = req.query;
+
+    if (!Number.isInteger(attachmentId)) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Attachment not found" });
+      return;
+    }
+
+    const numRequesterId = Number(requesterId);
+    if (!requesterId || !Number.isInteger(numRequesterId)) {
+      res.status(400).json({
+        error: "MISSING_REQUESTER",
+        message: "requesterId is required",
+      });
+      return;
+    }
+
+    const prisma = getPrisma();
+
+    // Check active requester
+    const activeRequester = await prisma.requesterUser.findFirst({
+      where: { id: numRequesterId, active: true },
+      select: { id: true },
+    });
+
+    if (!activeRequester) {
+      res.status(400).json({
+        error: "BAD_REQUESTER",
+        message: "Invalid or inactive requester",
+      });
+      return;
+    }
+
+    // Must be owned AND not removed (removed files return 404, indistinguishable from non-existent)
+    const attachment = await prisma.attachment.findFirst({
+      where: {
+        id: attachmentId,
+        removedAt: null,
+        ticket: { requesterId: numRequesterId },
+      },
+    });
+
+    if (!attachment) {
+      res.status(404).json({
+        error: "NOT_FOUND",
+        message: "Attachment not found or removed",
+      });
+      return;
+    }
+
+    const uploadDir = getUploadDir();
+    const filePath = path.join(uploadDir, attachment.storedFilename);
+
+    if (!fs.existsSync(filePath)) {
+      res.status(404).json({
+        error: "NOT_FOUND",
+        message: "File not found on disk",
+      });
+      return;
+    }
+
+    // Safe Content-Disposition header with RFC 5987 UTF-8 filename encoding
+    const encodedFilename = encodeURIComponent(attachment.originalName);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`
+    );
+    res.setHeader("Content-Type", attachment.mimeType);
+    res.setHeader("Content-Length", attachment.sizeBytes);
+
+    fs.createReadStream(filePath).pipe(res);
+  } catch {
+    res.status(500).json({
+      error: "INTERNAL_ERROR",
+      message: "Unable to download attachment",
+    });
+  }
+});
+
+// Soft-Remove Attachment
+app.delete("/api/attachments/:id", async (req: Request, res: Response) => {
+  try {
+    const attachmentId = Number(req.params.id);
+    const { requesterId } = req.query;
+    const { reason } = req.body || {};
+
+    if (!Number.isInteger(attachmentId)) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Attachment not found" });
+      return;
+    }
+
+    const numRequesterId = Number(requesterId);
+    if (!requesterId || !Number.isInteger(numRequesterId)) {
+      res.status(400).json({
+        error: "MISSING_REQUESTER",
+        message: "requesterId is required",
+      });
+      return;
+    }
+
+    const trimmedReason = typeof reason === "string" ? reason.trim() : "";
+    if (trimmedReason.length < 1 || trimmedReason.length > 500) {
+      res.status(400).json({
+        error: "REASON_REQUIRED",
+        message: "A removal reason is required",
+      });
+      return;
+    }
+
+    const prisma = getPrisma();
+
+    // Check active requester
+    const activeRequester = await prisma.requesterUser.findFirst({
+      where: { id: numRequesterId, active: true },
+      select: { id: true },
+    });
+
+    if (!activeRequester) {
+      res.status(400).json({
+        error: "BAD_REQUESTER",
+        message: "Invalid or inactive requester",
+      });
+      return;
+    }
+
+    // Ownership check via parent ticket
+    const attachment = await prisma.attachment.findFirst({
+      where: {
+        id: attachmentId,
+        ticket: { requesterId: numRequesterId },
+      },
+    });
+
+    if (!attachment) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Attachment not found" });
+      return;
+    }
+
+    if (attachment.removedAt !== null) {
+      res.status(409).json({
+        error: "ALREADY_REMOVED",
+        message: "This attachment was already removed",
+      });
+      return;
+    }
+
+    // Soft remove: NEVER physically delete database row
+    const updated = await prisma.attachment.update({
+      where: { id: attachmentId },
+      data: {
+        removedAt: new Date(),
+        removalReason: trimmedReason,
+      },
+      select: {
+        id: true,
+        originalName: true,
+        mimeType: true,
+        sizeBytes: true,
+        uploadedAt: true,
+        removedAt: true,
+        removalReason: true,
+      },
+    });
+
+    res.status(200).json(updated);
+  } catch {
+    res.status(500).json({
+      error: "INTERNAL_ERROR",
+      message: "Unable to remove attachment",
+    });
   }
 });
 
