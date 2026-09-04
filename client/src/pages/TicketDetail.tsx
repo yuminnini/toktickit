@@ -16,10 +16,20 @@ export default function TicketDetail() {
   const [isNotFound, setIsNotFound] = useState(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const currentRequesterIdRef = useRef<number | undefined>(requester?.id);
+  currentRequesterIdRef.current = requester?.id;
 
   const loadTicket = useCallback(
-    (signal?: AbortSignal, showSpinner = true) => {
-      if (!id || !requester?.id) return;
+    (showSpinner = true) => {
+      const currentReqId = requester?.id;
+      if (!id || !currentReqId) return;
+
+      // Abort any existing in-flight request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
       if (showSpinner) {
         setLoading(true);
@@ -27,14 +37,14 @@ export default function TicketDetail() {
       setError(null);
       setIsNotFound(false);
 
-      fetchTicketDetail(Number(id), requester.id, signal)
+      fetchTicketDetail(Number(id), currentReqId, controller.signal)
         .then((data) => {
-          if (!signal?.aborted) {
+          if (!controller.signal.aborted && currentRequesterIdRef.current === currentReqId) {
             setTicket(data);
           }
         })
         .catch((err: Error & { status?: number }) => {
-          if (!signal?.aborted) {
+          if (!controller.signal.aborted && currentRequesterIdRef.current === currentReqId) {
             if (err.status === 404) {
               setIsNotFound(true);
             } else {
@@ -43,7 +53,7 @@ export default function TicketDetail() {
           }
         })
         .finally(() => {
-          if (!signal?.aborted) {
+          if (!controller.signal.aborted && currentRequesterIdRef.current === currentReqId) {
             setLoading(false);
           }
         });
@@ -52,16 +62,12 @@ export default function TicketDetail() {
   );
 
   useEffect(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    loadTicket(controller.signal, true);
+    loadTicket(true);
 
     return () => {
-      controller.abort();
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
   }, [loadTicket]);
 
@@ -178,7 +184,7 @@ export default function TicketDetail() {
             ticketId={ticket.id}
             requesterId={requester!.id}
             attachments={ticket.attachments || []}
-            onAttachmentChanged={() => loadTicket(undefined, false)}
+            onAttachmentChanged={() => loadTicket(false)}
           />
         </div>
 

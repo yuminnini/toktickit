@@ -91,4 +91,85 @@ describe("TicketDetail Component", () => {
       ).toBeInTheDocument();
     });
   });
+
+  it("aborts in-flight fetch and prevents stale data overwrite when requester changes", async () => {
+    let resolveReq1: (val: any) => void;
+    const req1Promise = new Promise((resolve) => {
+      resolveReq1 = resolve;
+    });
+
+    const fetchSpy = vi.spyOn(api, "fetchTicketDetail").mockImplementation((_id, reqId) => {
+      if (reqId === 1) {
+        return req1Promise as any;
+      }
+      return Promise.resolve({
+        id: 42,
+        ticketNumber: "TKT-2026-000042-B",
+        summary: "Requester B Ticket",
+        description: "Desc B",
+        category: { id: 1, name: "Hardware" },
+        relatedSystem: { id: 2, name: "Corporate Laptop" },
+        requestedPriority: "LOW",
+        currentStatus: "NEW",
+        createdAt: "2026-09-03T12:00:00Z",
+        attachments: [],
+      });
+    });
+
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/tickets/42"]}>
+        <RequesterContext.Provider
+          value={{
+            requester: { id: 1, name: "Requester A" },
+            setRequester: vi.fn(),
+            clearRequester: vi.fn(),
+          }}
+        >
+          <Routes>
+            <Route path="/tickets/:id" element={<TicketDetail />} />
+          </Routes>
+        </RequesterContext.Provider>
+      </MemoryRouter>
+    );
+
+    // Initial load for Requester A is in flight
+    expect(fetchSpy).toHaveBeenCalledWith(42, 1, expect.any(AbortSignal));
+
+    // Switch requester to Requester B
+    rerender(
+      <MemoryRouter initialEntries={["/tickets/42"]}>
+        <RequesterContext.Provider
+          value={{
+            requester: { id: 2, name: "Requester B" },
+            setRequester: vi.fn(),
+            clearRequester: vi.fn(),
+          }}
+        >
+          <Routes>
+            <Route path="/tickets/:id" element={<TicketDetail />} />
+          </Routes>
+        </RequesterContext.Provider>
+      </MemoryRouter>
+    );
+
+    // Now resolve Requester A's stale promise
+    resolveReq1!({
+      id: 42,
+      ticketNumber: "TKT-2026-STALE-A",
+      summary: "Stale Requester A Ticket",
+      description: "Stale",
+      category: { id: 1, name: "Hardware" },
+      relatedSystem: { id: 2, name: "Corporate Laptop" },
+      requestedPriority: "HIGH",
+      currentStatus: "NEW",
+      createdAt: "2026-09-03T12:00:00Z",
+      attachments: [],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("TKT-2026-000042-B")).toBeInTheDocument();
+      expect(screen.getByText("Requester B Ticket")).toBeInTheDocument();
+      expect(screen.queryByText("TKT-2026-STALE-A")).not.toBeInTheDocument();
+    });
+  });
 });

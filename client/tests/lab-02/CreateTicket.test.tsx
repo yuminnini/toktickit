@@ -126,4 +126,49 @@ describe("CreateTicket Component (UI-02, UI-03, UI-04)", () => {
     expect((screen.getByLabelText(/summary/i) as HTMLInputElement).value).toBe("Important Summary");
     expect((screen.getByLabelText(/description/i) as HTMLTextAreaElement).value).toBe("Important Description");
   });
+
+  it("shows partial-success warning when ticket is created but an attachment fails to upload", async () => {
+    vi.spyOn(api, "createTicket").mockResolvedValue({
+      id: 99,
+      ticketNumber: "TKT-2026-000099",
+      summary: "Ticket with failing attachment",
+      description: "Sample description",
+      category: { id: 1, name: "Hardware" },
+      categoryId: 1,
+      relatedSystem: { id: 1, name: "Corporate Laptop" },
+      relatedSystemId: 1,
+      requestedPriority: "LOW",
+      currentStatus: "NEW",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    vi.spyOn(api, "uploadAttachment").mockRejectedValue(new Error("Storage unavailable"));
+
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/summary/i)).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText(/summary/i), { target: { value: "Ticket with failing attachment" } });
+    fireEvent.change(screen.getByLabelText(/description/i), { target: { value: "Sample description" } });
+
+    // Stage an attachment
+    const fileInput = screen.getByLabelText(/attachments/i, { selector: "input" });
+    const validFile = new File(["dummy content"], "log.pdf", { type: "application/pdf" });
+    fireEvent.change(fileInput, { target: { files: [validFile] } });
+
+    await waitFor(() => {
+      expect(screen.getByText("log.pdf")).toBeInTheDocument();
+    });
+
+    const submitBtn = screen.getByRole("button", { name: /submit ticket/i });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("TKT-2026-000099")).toBeInTheDocument();
+      expect(screen.getByText(/1 attachment\(s\) could not be uploaded/i)).toBeInTheDocument();
+    });
+  });
 });

@@ -89,13 +89,27 @@ a Business Rule.
 - [ ] Editable vs read-only fields visually distinguishable (Ticket Detail vs Create Ticket)
 - [ ] Filters, pagination, and attachment controls remain usable at all 3 sizes
 - [ ] Screenshots match `ui-spec.md` and the approved mockups (§8.1, §8.4, §8.5 of the labsheet), not personal memory
-## 5. Test Commands
-cd server && npx vitest run
-cd client && npx vitest run
-npx playwright test e2e/lab-02/
-(Playwright is introduced starting Phase 4, once Create Ticket exists to test end-to-end; installed via `npm install -D @playwright/test` in a later phase.)
+## 5. Test Commands & Reproduction Steps
 
-## 6. Final Results
+### Prerequisites & Database Setup
+A PostgreSQL database must be reachable (e.g. `toktickit-db` container on port 5233):
+```bash
+cd server
+# Copy environment file if not present:
+cp .env.test.example .env.test
+# Run migrations and seed:
+npx prisma migrate dev
+npx prisma db seed
+```
+
+### Automated Unit & Integration Tests
+```bash
+# Server tests (auto-loads .env.test or .env via vitest.config.ts)
+cd server && npm test
+
+# Client tests
+cd client && npm test
+```
 To be filled in after implementation phases (Phase 2–7) are complete and all tests are run
 against the final `main` branch — not before. Placeholder until then; no test is marked
 "Pass" based on assumption.

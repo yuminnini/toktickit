@@ -10,6 +10,7 @@ import {
   upload,
   deleteFileFromStorage,
   getUploadDir,
+  resolveSafeFilePath,
 } from "./services/attachmentStorage.js";
 
 export const app = express();
@@ -403,8 +404,77 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
   }
 });
 
-// Upload Attachment (one file per call)
-app.post("/api/tickets/:id/attachments", (req: Request, res: Response) => {
+// Pre-validation middleware for upload: check params, requester, ticket ownership and active count before Multer writes to disk
+const validateTicketForUpload = async (req: Request, res: Response, next: express.NextFunction) => {
+  try {
+    const ticketId = Number(req.params.id);
+    const { requesterId } = req.query;
+
+    if (!Number.isInteger(ticketId)) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
+      return;
+    }
+
+    const numRequesterId = Number(requesterId);
+    if (!requesterId || !Number.isInteger(numRequesterId)) {
+      res.status(400).json({
+        error: "MISSING_REQUESTER",
+        message: "requesterId is required",
+      });
+      return;
+    }
+
+    const prisma = getPrisma();
+
+    // Check active requester
+    const activeRequester = await prisma.requesterUser.findFirst({
+      where: { id: numRequesterId, active: true },
+      select: { id: true },
+    });
+
+    if (!activeRequester) {
+      res.status(400).json({
+        error: "BAD_REQUESTER",
+        message: "Invalid or inactive requester",
+      });
+      return;
+    }
+
+    // Check ticket ownership
+    const ticket = await prisma.ticket.findFirst({
+      where: { id: ticketId, requesterId: numRequesterId },
+      select: { id: true },
+    });
+
+    if (!ticket) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
+      return;
+    }
+
+    // Preliminary check of active attachments limit before disk write
+    const activeCount = await prisma.attachment.count({
+      where: { ticketId, removedAt: null },
+    });
+
+    if (activeCount >= 5) {
+      res.status(409).json({
+        error: "ATTACHMENT_LIMIT",
+        message: "This ticket already has 5 active attachments",
+      });
+      return;
+    }
+
+    next();
+  } catch {
+    res.status(500).json({
+      error: "INTERNAL_ERROR",
+      message: "Unable to validate ticket for upload",
+    });
+  }
+};
+
+// Upload Attachment (one file per call, concurrency-safe with row-level lock)
+app.post("/api/tickets/:id/attachments", validateTicketForUpload, (req: Request, res: Response) => {
   upload.single("file")(req, res, async (err: any) => {
     if (err) {
       if (err.code === "LIMIT_FILE_SIZE") {
@@ -440,90 +510,53 @@ app.post("/api/tickets/:id/attachments", (req: Request, res: Response) => {
 
     try {
       const ticketId = Number(req.params.id);
-      const { requesterId } = req.query;
-
-      if (!Number.isInteger(ticketId)) {
-        await deleteFileFromStorage(filenameToDelete);
-        res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
-        return;
-      }
-
-      const numRequesterId = Number(requesterId);
-      if (!requesterId || !Number.isInteger(numRequesterId)) {
-        await deleteFileFromStorage(filenameToDelete);
-        res.status(400).json({
-          error: "MISSING_REQUESTER",
-          message: "requesterId is required",
-        });
-        return;
-      }
-
       const prisma = getPrisma();
 
-      // Check active requester
-      const activeRequester = await prisma.requesterUser.findFirst({
-        where: { id: numRequesterId, active: true },
-        select: { id: true },
-      });
+      // Concurrency-safe: interactive transaction with row-level lock on the Ticket
+      const attachment = await prisma.$transaction(async (tx) => {
+        // Lock ticket row for update to serialize concurrent uploads for this ticket
+        await tx.$queryRaw`SELECT id FROM "Ticket" WHERE id = ${ticketId} FOR UPDATE`;
 
-      if (!activeRequester) {
-        await deleteFileFromStorage(filenameToDelete);
-        res.status(400).json({
-          error: "BAD_REQUESTER",
-          message: "Invalid or inactive requester",
+        const activeCount = await tx.attachment.count({
+          where: { ticketId, removedAt: null },
         });
-        return;
-      }
 
-      // Check ticket ownership
-      const ticket = await prisma.ticket.findFirst({
-        where: { id: ticketId, requesterId: numRequesterId },
-        select: { id: true },
+        if (activeCount >= 5) {
+          const limitErr = new Error("ATTACHMENT_LIMIT");
+          (limitErr as any).code = "ATTACHMENT_LIMIT";
+          throw limitErr;
+        }
+
+        return tx.attachment.create({
+          data: {
+            ticketId,
+            originalName: req.file!.originalname,
+            storedFilename: req.file!.filename,
+            mimeType: req.file!.mimetype,
+            sizeBytes: req.file!.size,
+          },
+          select: {
+            id: true,
+            originalName: true,
+            mimeType: true,
+            sizeBytes: true,
+            uploadedAt: true,
+            removedAt: true,
+            removalReason: true,
+          },
+        });
       });
 
-      if (!ticket) {
-        await deleteFileFromStorage(filenameToDelete);
-        res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
-        return;
-      }
-
-      // Concurrency-safe check of active attachments limit (max 5)
-      const activeCount = await prisma.attachment.count({
-        where: { ticketId, removedAt: null },
-      });
-
-      if (activeCount >= 5) {
-        await deleteFileFromStorage(filenameToDelete);
+      res.status(201).json(attachment);
+    } catch (dbErr: any) {
+      await deleteFileFromStorage(filenameToDelete);
+      if (dbErr?.code === "ATTACHMENT_LIMIT" || dbErr?.message === "ATTACHMENT_LIMIT") {
         res.status(409).json({
           error: "ATTACHMENT_LIMIT",
           message: "This ticket already has 5 active attachments",
         });
         return;
       }
-
-      // Insert attachment record
-      const attachment = await prisma.attachment.create({
-        data: {
-          ticketId,
-          originalName: req.file.originalname,
-          storedFilename: req.file.filename,
-          mimeType: req.file.mimetype,
-          sizeBytes: req.file.size,
-        },
-        select: {
-          id: true,
-          originalName: true,
-          mimeType: true,
-          sizeBytes: true,
-          uploadedAt: true,
-          removedAt: true,
-          removalReason: true,
-        },
-      });
-
-      res.status(201).json(attachment);
-    } catch {
-      await deleteFileFromStorage(filenameToDelete);
       res.status(500).json({
         error: "INTERNAL_ERROR",
         message: "Unable to save attachment",
@@ -652,10 +685,9 @@ app.get("/api/attachments/:id/download", async (req: Request, res: Response) => 
       return;
     }
 
-    const uploadDir = getUploadDir();
-    const filePath = path.join(uploadDir, attachment.storedFilename);
+    const filePath = resolveSafeFilePath(attachment.storedFilename);
 
-    if (!fs.existsSync(filePath)) {
+    if (!filePath || !fs.existsSync(filePath)) {
       res.status(404).json({
         error: "NOT_FOUND",
         message: "File not found on disk",
@@ -672,7 +704,20 @@ app.get("/api/attachments/:id/download", async (req: Request, res: Response) => 
     res.setHeader("Content-Type", attachment.mimeType);
     res.setHeader("Content-Length", attachment.sizeBytes);
 
-    fs.createReadStream(filePath).pipe(res);
+    const stream = fs.createReadStream(filePath);
+
+    stream.on("error", () => {
+      if (!res.headersSent) {
+        res.status(404).json({
+          error: "NOT_FOUND",
+          message: "File not found",
+        });
+      } else {
+        res.destroy();
+      }
+    });
+
+    stream.pipe(res);
   } catch {
     res.status(500).json({
       error: "INTERNAL_ERROR",

@@ -32,12 +32,24 @@ export function isValidFileType(originalName: string, mimeType: string): boolean
   return allowedMimes ? allowedMimes.includes(mimeType.toLowerCase()) : false;
 }
 
+export function resolveSafeFilePath(storedFilename: string): string | null {
+  if (!storedFilename || typeof storedFilename !== "string") {
+    return null;
+  }
+  const root = path.resolve(getUploadDir());
+  const filePath = path.resolve(root, storedFilename);
+  const relative = path.relative(root, filePath);
+
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    return null;
+  }
+  return filePath;
+}
+
 export async function deleteFileFromStorage(storedFilename: string): Promise<void> {
   try {
-    const uploadDir = getUploadDir();
-    const filePath = path.join(uploadDir, storedFilename);
-    // Security check: ensure filePath is inside uploadDir
-    if (!filePath.startsWith(uploadDir)) {
+    const filePath = resolveSafeFilePath(storedFilename);
+    if (!filePath) {
       return;
     }
     if (fs.existsSync(filePath)) {

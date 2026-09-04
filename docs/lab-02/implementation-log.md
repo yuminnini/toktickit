@@ -148,40 +148,57 @@
     - Integrated `AttachmentPicker` into `CreateTicket.tsx` (staged upload after ticket creation with partial failure reporting).
     - Integrated `AttachmentSection` into `TicketDetail.tsx` replacing previous placeholder.
   - Automated tests:
-    - Added `server/tests/lab-02/attachments.api.test.ts` covering API-07, API-08, API-09, API-10, API-12, API-13, API-14, file validation, quota freeing, and disk cleanup.
-    - Added `client/tests/lab-02/AttachmentSection.test.tsx` covering UI-08 (.exe rejection), file size rejection, rendering, download, removal modal, and quota limit.
+    - Added `server/tests/lab-02/attachments.api.test.ts` (25 tests) covering API-07, API-08, API-09, API-10, API-12, API-13, API-14, concurrency-safe parallel upload race conditions (Promise.all), exact 5 MB boundary, 5 MB + 1 byte boundary, pre-validation without disk write, compensation on DB failure, path traversal blocking, and stream error handling.
+    - Added `client/tests/lab-02/AttachmentSection.test.tsx` (8 tests) covering UI-08 (.exe rejection), file size rejection, rendering, download, removal modal, and quota limit.
+    - Added `CreateTicket.test.tsx` partial upload warning test and `RequesterTicketDetail.test.tsx` requester switch stale data rejection test.
+- Peer Review Resolutions:
+  - 1. Concurrency-safe 5-attachment limit: wrapped upload in `prisma.$transaction` with `SELECT id FROM "Ticket" WHERE id = ${ticketId} FOR UPDATE` row lock. Added concurrent upload test with `Promise.all`.
+  - 2 & 3. Path traversal protection: implemented `resolveSafeFilePath` using `path.resolve` and `path.relative` checking for `..` and absolute paths. Used in both deletion and download handler.
+  - 4. Stale response prevention: refactored `loadTicket` in `TicketDetail.tsx` to manage its own `AbortController` and track current requester ID to discard stale responses.
+  - 5. Pre-validation middleware: added `validateTicketForUpload` middleware checking params, requester, ticket ownership, and active attachments before Multer writes to disk.
+  - 6. Download stream error handling: added `stream.on("error")` handler returning 404 or destroying response safely without crashing.
+  - 7. Isolated temporary upload directory in tests: used `fs.mkdtempSync` and `process.env.UPLOAD_DIR` in `attachments.api.test.ts`, with cleanup in `afterAll`.
+  - 8. Test database reproducibility: added `server/.env.test.example` and configured `server/vitest.config.ts` to auto-load `.env.test` or `.env`.
+  - 9. Reproducibility documentation: updated `docs/lab-02/tests.md` with explicit database prerequisites and setup commands.
+  - 10. Added missing edge case tests: concurrent upload, 5 MB boundaries, DB compensation, path traversal, download stream error, partial upload warning, requester switch abort.
+  - 11. Test order independence: tests in `attachments.api.test.ts` create self-contained fixtures, runnable independently with `-t`.
+  - 12. Dependency audit: resolved `qs` vulnerability via override in `server/package.json`. Documented that remaining devDependency reports are in vitest/esbuild.
 - Requirements: `FR-07`, `BR-04`, `BR-06`, `BR-10`, `AC-11`, `AC-12`, `AC-13`, `AC-14`, `AC-15`
 
 ### Files changed
-- `server/package.json`, `server/package-lock.json`: Added `multer` (v2.3.0) and `@types/multer` (v2.2.0).
+- `server/package.json`, `server/package-lock.json`: Added `multer` (v2.3.0), `@types/multer` (v2.2.0), and `qs` override.
+- `server/.env.test.example`: Added test environment configuration example.
+- `server/vitest.config.ts`: Added auto-loading of `.env.test` / `.env`.
 - `.gitignore`: Added `uploads/` and `server/uploads/` to ignore stored attachment files.
-- `server/src/services/attachmentStorage.ts`: File storage service with validation, UUID naming, and compensation deletion.
-- `server/src/app.ts`: Implemented upload, metadata, download, and soft-remove attachment routes.
-- `server/tests/lab-02/attachments.api.test.ts`: Integration tests for attachment lifecycle (21 tests).
+- `server/src/services/attachmentStorage.ts`: Added `resolveSafeFilePath` path containment helper, UUID naming, and compensation deletion.
+- `server/src/app.ts`: Implemented `validateTicketForUpload` middleware, concurrency-safe row-level lock transaction for uploads, safe download route with stream error handling, metadata, and soft-remove.
+- `server/tests/lab-02/attachments.api.test.ts`: Self-contained, order-independent integration tests using temporary upload directory (25 tests).
 - `client/src/api.ts`: Added attachment helper functions (`uploadAttachment`, `removeAttachment`, `getAttachmentDownloadUrl`).
 - `client/src/components/AttachmentPicker.tsx`: Reusable picker component with client-side validation.
 - `client/src/components/AttachmentSection.tsx`: Complete attachment management section for ticket details.
 - `client/src/pages/CreateTicket.tsx`: Added staged attachments and sequential upload.
-- `client/src/pages/TicketDetail.tsx`: Integrated `AttachmentSection` with reload callback.
+- `client/src/pages/TicketDetail.tsx`: Integrated `AttachmentSection` with self-managed `AbortController`.
 - `client/tests/lab-02/AttachmentSection.test.tsx`: Client unit tests for attachment components and UI-08.
-- `docs/lab-02/tests.md`: Marked API-07..10, API-12..14, and UI-08 as Pass.
-- `docs/lab-02/implementation-log.md`: Appended Phase 5 implementation entry.
+- `client/tests/lab-02/CreateTicket.test.tsx`: Added partial upload warning test.
+- `client/tests/lab-02/RequesterTicketDetail.test.tsx`: Added requester switch abort test.
+- `docs/lab-02/tests.md`: Marked API-07..10, API-12..14, and UI-08 as Pass; added reproduction steps.
+- `docs/lab-02/implementation-log.md`: Appended Phase 5 implementation entry and review fixes.
 
 ### Database/dependencies
 - Dependencies: `multer` and `@types/multer` installed in server.
-- Database: Existing `Attachment` Prisma model utilized. No new migrations needed.
+- Database: Existing `Attachment` Prisma model utilized. Row-level locks (`SELECT ... FOR UPDATE`) used for concurrency safety.
 
 ### Verification run
-- `cd server && npm test` -> Pass; 11 test files, 50 tests passed
+- `cd server && npm test` -> Pass; 11 test files, 54 tests passed
 - `cd server && npm run build` -> Pass; TypeScript compilation succeeded
-- `cd client && npm test` -> Pass; 9 test files, 39 tests passed
+- `cd client && npm test` -> Pass; 9 test files, 41 tests passed
 - `cd client && npm run build` -> Pass; TypeScript and Vite build succeeded
 
 ### Evidence
 - All planned tests for Phase 5 (API-07, API-08, API-09, API-10, API-12, API-13, API-14, UI-08) verified and passing.
 
 ### Next safe task
-- Create PR from `feature/lab2-attachments` into `lab2-staging` for review and merge.
+- Merge PR for `feature/lab2-attachments` into `lab2-staging`.
 - Proceed to **Phase 6: Zen Green reusable UI, accessibility, and responsive behavior (`feature/lab2-zen-green-responsive`)**.
 
 
