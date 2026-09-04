@@ -4,12 +4,14 @@ import {
   fetchCategories,
   fetchRelatedSystems,
   createTicket,
+  uploadAttachment,
   Category,
   RelatedSystem,
   PriorityType,
   TicketItem,
 } from "../api";
 import { useRequester } from "../context/RequesterContext";
+import { AttachmentPicker } from "../components/AttachmentPicker";
 
 export default function CreateTicket() {
   const { requester } = useRequester();
@@ -23,6 +25,8 @@ export default function CreateTicket() {
   const [summary, setSummary] = useState("");
   const [description, setDescription] = useState("");
   const [requestedPriority, setRequestedPriority] = useState<PriorityType>("MEDIUM");
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [uploadWarning, setUploadWarning] = useState<string | null>(null);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [apiError, setApiError] = useState<string | null>(null);
@@ -136,6 +140,24 @@ export default function CreateTicket() {
         description: description.trim(),
         requestedPriority,
       });
+
+      if (attachments.length > 0) {
+        let failedCount = 0;
+        for (const file of attachments) {
+          try {
+            await uploadAttachment(ticket.id, requester.id, file);
+          } catch (attErr) {
+            console.error("Failed to upload attachment:", file.name, attErr);
+            failedCount++;
+          }
+        }
+        if (failedCount > 0) {
+          setUploadWarning(
+            `Ticket created, but ${failedCount} attachment(s) could not be uploaded.`
+          );
+        }
+      }
+
       setCreatedTicket(ticket);
     } catch (err: any) {
       setApiError(err.message || "Unable to save your ticket. Please try again.");
@@ -151,6 +173,8 @@ export default function CreateTicket() {
     setCreatedTicket(null);
     setSummary("");
     setDescription("");
+    setAttachments([]);
+    setUploadWarning(null);
     setErrors({});
     setApiError(null);
   }
@@ -173,6 +197,13 @@ export default function CreateTicket() {
           <div className="display-6 fw-bold mb-4" style={{ color: "var(--color-primary)" }}>
             {createdTicket.ticketNumber}
           </div>
+
+          {uploadWarning && (
+            <div className="alert alert-warning mb-3 py-2 px-3 small" role="alert">
+              ⚠️ {uploadWarning}
+            </div>
+          )}
+
           <div className="d-flex justify-content-center gap-3">
             <Link to="/my-tickets" className="btn btn-success">
               View My Tickets
@@ -353,6 +384,14 @@ export default function CreateTicket() {
             <option value="HIGH">High</option>
           </select>
         </div>
+
+        {/* Attachments */}
+        <AttachmentPicker
+          files={attachments}
+          onChange={setAttachments}
+          maxFiles={5}
+          disabled={isSubmitting}
+        />
 
         {/* Form Actions */}
         <div className="d-flex justify-content-end gap-2 pt-2">
