@@ -13,7 +13,7 @@ interface RequesterContextValue {
 
 const STORAGE_KEY = "lab2-selected-requester";
 
-const RequesterContext = createContext<RequesterContextValue | undefined>(undefined);
+export const RequesterContext = createContext<RequesterContextValue | undefined>(undefined);
 
 function loadFromStorage(): Requester | null {
     const raw = sessionStorage.getItem(STORAGE_KEY);

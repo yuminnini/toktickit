@@ -4,6 +4,7 @@ import RequesterRouteGuard from "./components/RequesterRouteGuard";
 import AppShell from "./components/AppShell";
 import MyTickets from "./pages/MyTickets";
 import CreateTicket from "./pages/CreateTicket";
+import TicketDetail from "./pages/TicketDetail";
 import CheckSystem from "./pages/CheckSystem";
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
             <Route path="/" element={<Navigate to="/my-tickets" replace />} />
             <Route path="/my-tickets" element={<MyTickets />} />
             <Route path="/tickets/new" element={<CreateTicket />} />
+            <Route path="/tickets/:id" element={<TicketDetail />} />
           </Route>
         </Route>
 

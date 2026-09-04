@@ -82,3 +82,51 @@
 
 ### Next safe task
 - Merge feature/lab2-ticket-creation to lab2-staging and begin Phase 4: My Tickets and owned Ticket Detail.
+
+## 2026-09-04 - Phase 4: My Tickets and owned Ticket Detail
+
+- Branch: `feature/lab2-phase4`
+- Commit/PR: Pending PR to lab2-staging
+- Scope completed: Implemented My Tickets list API (`GET /api/tickets`) with ownership scope, case-insensitive substring search across `ticketNumber` and `summary`, category/priority/status filters, deterministic primary and secondary (`id`) sorting, pagination with clamping, `unfilteredTotal` count, and inactive requester rejection. Implemented owned Ticket Detail API (`GET /api/tickets/:id`) returning full ticket metadata with 404 for unowned or non-existent tickets. On client, implemented `MyTickets.tsx` with responsive table (desktop/tablet) and cards (mobile), empty vs no-results distinction, stale data prevention on requester switch, and `Pagination.tsx`. Implemented read-only `TicketDetail.tsx` with 404 guard and routing in `App.tsx`. Resolved all 10 peer review points.
+- Requirements: `FR-03`, `FR-04`, `FR-05`, `FR-06`, `FR-10`, `BR-05`, `BR-07`, `BR-12`, `BR-13`, `AC-03`, `AC-07`, `AC-08`, `AC-09`, `AC-10`, `AC-19`, `AC-20`, `AC-21`
+
+### Files changed
+- `server/src/app.ts`: Implemented `GET /api/tickets` and `GET /api/tickets/:id` with ownership query filtering, active requester validation, deterministic sort, and pagination.
+- `server/tests/lab-02/my-tickets.api.test.ts`: Integration tests verifying ownership scoping, search, filters, sort, pagination, clamping, and error responses.
+- `server/tests/lab-02/ticket-detail.api.test.ts`: Integration tests verifying owner detail access (200), cross-owner access (404), missing/inactive requester (400).
+- `client/src/api.ts`: Added `TicketListItem`, `TicketListResponse`, `TicketDetail`, `AttachmentItem`, `fetchTickets`, and `fetchTicketDetail`.
+- `client/src/context/RequesterContext.tsx`: Exported `RequesterContext` for direct testing/provider use.
+- `client/src/components/TicketTable.tsx`: Reusable desktop/tablet table component using string `ticket.category` and `Badge`.
+- `client/src/components/TicketCard.tsx`: Reusable mobile card component for tickets.
+- `client/src/components/Pagination.tsx`: Reusable pagination controls with previous/next buttons and page counters.
+- `client/src/pages/MyTickets.tsx`: Complete My Tickets screen with search, filters, sort, pagination, empty state (with `/tickets/new` CTA), no-results state, and `AbortController` cancellation to prevent stale data.
+- `client/src/pages/TicketDetail.tsx`: Read-only ticket detail screen with not-found state and back navigation.
+- `client/src/App.tsx`: Added `/tickets/:id` route under guarded `AppShell`.
+- `client/tests/lab-02/MyTickets.test.tsx`: UI tests for empty state (UI-05), no-results state (UI-06), requester switch (UI-07), and pagination (UI-11).
+- `client/tests/lab-02/RequesterTicketDetail.test.tsx`: UI tests for ticket detail display and 404 state.
+- `client/tests/lab-02/Badge.style.test.tsx`: UI style tests verifying badge CSS classes and labels (STYLE-02).
+- `docs/lab-02/tests.md`: Updated Pass statuses for API-02, API-05, API-06, API-16, API-17, API-18, UI-05, UI-06, UI-07, UI-11, STYLE-02.
+
+### Database/dependencies
+- Migration: None (reused Phase 1 schema)
+- Dependency changes: None
+- Database configuration: PostgreSQL Docker container `toktickit-db` on port 5233.
+
+### Verification run
+- `cd server && npm test` -> Pass; 10 test files, 28 tests passed
+- `cd server && npm run build` -> Pass; TypeScript compilation succeeded
+- `cd client && npm test` -> Pass; 8 test files, 30 tests passed
+- `cd client && npm run build` -> Pass; TypeScript and Vite build succeeded
+
+### Evidence
+- Screenshot/artifact paths: None (E2E / screenshots scheduled for Phase 7)
+- Red test before implementation: My Tickets and Ticket Detail routes returned 404/empty, client tests failed prior to page and component implementation.
+- Green test after implementation: All 28 server tests and 30 client tests pass with 0 failures and 0 skipped.
+
+### Known risks / not completed
+- Attachment uploading, downloading, and soft-removal lifecycle endpoints and UI (deferred to Phase 5).
+- End-to-end Playwright tests across multiple viewports (deferred to Phase 6 & 7).
+
+### Next safe task
+- Begin Phase 5: Attachment lifecycle end-to-end (`feature/lab2-attachments`).
+
