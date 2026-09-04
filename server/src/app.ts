@@ -155,17 +155,18 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       { id: sortOrder },
     ];
 
-    // Pagination
-    let parsedPage = Number(page);
-    if (!Number.isInteger(parsedPage) || parsedPage < 1) {
-      parsedPage = 1;
+    // Pagination (strictly validate full digits to avoid parseInt("2abc") returning 2)
+    let parsedPage = 1;
+    if (typeof page === "string" && /^\d+$/.test(page.trim())) {
+      parsedPage = parseInt(page.trim(), 10);
+      if (parsedPage < 1) parsedPage = 1;
     }
 
-    let parsedPageSize = Number(pageSize);
-    if (!Number.isInteger(parsedPageSize) || parsedPageSize < 1) {
-      parsedPageSize = 10;
-    } else if (parsedPageSize > 50) {
-      parsedPageSize = 50;
+    let parsedPageSize = 10;
+    if (typeof pageSize === "string" && /^\d+$/.test(pageSize.trim())) {
+      parsedPageSize = parseInt(pageSize.trim(), 10);
+      if (parsedPageSize < 1) parsedPageSize = 10;
+      else if (parsedPageSize > 50) parsedPageSize = 50;
     }
 
     const [total, unfilteredTotal] = await Promise.all([
@@ -256,19 +257,13 @@ app.get("/api/tickets/:id", async (req: Request, res: Response) => {
         requesterId: numRequesterId,
       },
       include: {
-        category: { select: { id: true, name: true } },
-        relatedSystem: { select: { id: true, name: true } },
-        attachments: {
-          select: {
-            id: true,
-            originalName: true,
-            mimeType: true,
-            sizeBytes: true,
-            uploadedAt: true,
-            removedAt: true,
-            removalReason: true,
-          },
+        category: {
+          select: { id: true, name: true },
         },
+        relatedSystem: {
+          select: { id: true, name: true },
+        },
+        attachments: true,
       },
     });
 

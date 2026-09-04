@@ -37,6 +37,11 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
     category2Id = categories[1].id;
     relatedSystemId = system.id;
 
+    // Clean up any existing tickets for test requesters first for deterministic counts
+    await prisma.ticket.deleteMany({
+      where: { requesterId: { in: [requesterAId, requesterBId] } },
+    });
+
     // Seed 15 tickets for requesterA
     for (let i = 1; i <= 15; i++) {
       const isHigh = i % 3 === 0;
@@ -115,6 +120,15 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
     expect(res.status).toBe(200);
     expect(res.body.page).toBe(2); // clamped to totalPages = 2
     expect(res.body.data.length).toBe(5);
+  });
+
+  it("page=2abc falls back to page 1 silently without using partial parseInt value", async () => {
+    const res = await request(app)
+      .get("/api/tickets")
+      .query({ requesterId: requesterAId, page: "2abc", pageSize: 10 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.page).toBe(1); // falls back to 1 instead of returning page 2
   });
 
   it("API-06 / BR-07: invalid sort=xyz falls back to createdAt desc silently without 400", async () => {

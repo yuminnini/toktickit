@@ -175,6 +175,97 @@ describe("MyTickets Component (UI-05, UI-06, UI-07, UI-11)", () => {
     });
   });
 
+  it("UI-07 / AC-10: late-resolving response from previous Requester A cannot overwrite new Requester B data", async () => {
+    let resolveReqA: (val: any) => void;
+    const reqAPromise = new Promise((resolve) => {
+      resolveReqA = resolve;
+    });
+
+    const fetchSpy = vi.spyOn(api, "fetchTickets");
+
+    // First call (Requester A) stays pending
+    fetchSpy.mockImplementationOnce(() => reqAPromise as any);
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <RequesterContext.Provider
+          value={{
+            requester: { id: 1, name: "Alice" },
+            setRequester: vi.fn(),
+            clearRequester: vi.fn(),
+          }}
+        >
+          <MyTickets />
+        </RequesterContext.Provider>
+      </MemoryRouter>
+    );
+
+    // Switch to Requester B while Requester A request is still in flight
+    fetchSpy.mockResolvedValueOnce({
+      data: [
+        {
+          id: 202,
+          ticketNumber: "TKT-2026-000202",
+          summary: "Bob ticket about VPN",
+          category: "Software",
+          requestedPriority: "HIGH",
+          currentStatus: "NEW",
+          createdAt: "2026-09-02T10:00:00Z",
+        },
+      ],
+      page: 1,
+      pageSize: 10,
+      total: 1,
+      totalPages: 1,
+      unfilteredTotal: 1,
+    });
+
+    rerender(
+      <MemoryRouter>
+        <RequesterContext.Provider
+          value={{
+            requester: { id: 2, name: "Bob" },
+            setRequester: vi.fn(),
+            clearRequester: vi.fn(),
+          }}
+        >
+          <MyTickets />
+        </RequesterContext.Provider>
+      </MemoryRouter>
+    );
+
+    // Wait for Bob's data to appear
+    await waitFor(() => {
+      expect(screen.getAllByText("TKT-2026-000202")[0]).toBeInTheDocument();
+    });
+
+    // Now resolve Alice's late response
+    resolveReqA!({
+      data: [
+        {
+          id: 101,
+          ticketNumber: "TKT-2026-000101",
+          summary: "Alice stale ticket",
+          category: "Hardware",
+          requestedPriority: "LOW",
+          currentStatus: "NEW",
+          createdAt: "2026-09-01T10:00:00Z",
+        },
+      ],
+      page: 1,
+      pageSize: 10,
+      total: 1,
+      totalPages: 1,
+      unfilteredTotal: 1,
+    });
+
+    // Alice's data must NEVER overwrite Bob's data
+    await waitFor(() => {
+      expect(screen.queryByText("TKT-2026-000101")).not.toBeInTheDocument();
+      expect(screen.getAllByText("TKT-2026-000202")[0]).toBeInTheDocument();
+    });
+  });
+
   it("UI-11 / AC-09: clicking Next on pagination requests page=2 from API and updates view", async () => {
     const fetchSpy = vi.spyOn(api, "fetchTickets");
 
