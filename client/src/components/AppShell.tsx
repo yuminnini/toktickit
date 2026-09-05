@@ -15,23 +15,54 @@ export default function AppShell() {
     return (
         <div className="min-vh-100 d-flex flex-column" style={{ background: "var(--color-bg)" }}>
             <header
-                className="navbar navbar-expand-md navbar-dark px-3 py-2 shadow-sm"
-                style={{ backgroundColor: "var(--color-primary)" }}
+                className="navbar navbar-expand-md navbar-dark px-3 py-2 shadow-sm zen-header"
             >
-                <div className="container-fluid">
+                <div className="container-fluid zen-container">
                     <NavLink
                         to="/my-tickets"
-                        className="navbar-brand fw-bold d-flex align-items-center me-4"
-                        style={{ color: "#FFFFFF", letterSpacing: "0.5px" }}
+                        className="navbar-brand fw-bold d-flex align-items-center me-3 text-white"
+                        style={{ letterSpacing: "0.5px" }}
                     >
                         TokTickIT
                     </NavLink>
+
+                    {/* Requester info on header bar (single DOM node visible on both desktop & mobile) */}
+                    <div className="d-flex align-items-center text-white ms-auto me-2 me-md-0 order-md-last">
+                        {requester && (
+                            <div className="d-flex align-items-center gap-2">
+                                <span
+                                    className="badge bg-light text-dark py-1 px-2 rounded-pill text-truncate"
+                                    style={{ maxWidth: 160 }}
+                                    title={requester.name}
+                                >
+                                    👤 {requester.name}
+                                </span>
+                                <button
+                                    type="button"
+                                    className="btn btn-link text-white text-decoration-underline p-1 small"
+                                    style={{
+                                        fontSize: "14px",
+                                        cursor: "pointer",
+                                        minHeight: "44px",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                    }}
+                                    onClick={handleChangeRequester}
+                                    aria-label="Change Requester"
+                                >
+                                    Change
+                                </button>
+                            </div>
+                        )}
+                    </div>
 
                     <button
                         className="navbar-toggler"
                         type="button"
                         aria-label="Toggle navigation"
+                        aria-expanded={isMenuOpen}
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
+                        style={{ minHeight: "44px", minWidth: "44px" }}
                     >
                         <span className="navbar-toggler-icon"></span>
                     </button>
@@ -42,11 +73,8 @@ export default function AppShell() {
                                 <NavLink
                                     to="/my-tickets"
                                     className={({ isActive }) =>
-                                        `nav-link px-3 ${isActive ? "active fw-bold text-white" : "text-white-50"}`
+                                        `nav-link px-3 zen-nav-link ${isActive ? "active" : ""}`
                                     }
-                                    style={({ isActive }) => ({
-                                        borderBottom: isActive ? "3px solid var(--color-secondary)" : "none",
-                                    })}
                                     onClick={() => setIsMenuOpen(false)}
                                 >
                                     My Tickets
@@ -56,40 +84,19 @@ export default function AppShell() {
                                 <NavLink
                                     to="/tickets/new"
                                     className={({ isActive }) =>
-                                        `nav-link px-3 ${isActive ? "active fw-bold text-white" : "text-white-50"}`
+                                        `nav-link px-3 zen-nav-link ${isActive ? "active" : ""}`
                                     }
-                                    style={({ isActive }) => ({
-                                        borderBottom: isActive ? "3px solid var(--color-secondary)" : "none",
-                                    })}
                                     onClick={() => setIsMenuOpen(false)}
                                 >
                                     Create Ticket
                                 </NavLink>
                             </li>
                         </ul>
-
-                        <div className="d-flex align-items-center text-white">
-                            {requester && (
-                                <div className="d-flex align-items-center gap-2">
-                                    <span className="badge bg-light text-dark py-1 px-2 rounded-pill">
-                                        👤 {requester.name}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        className="btn btn-link text-white text-decoration-underline p-0 ms-2 small"
-                                        style={{ fontSize: "14px", cursor: "pointer" }}
-                                        onClick={handleChangeRequester}
-                                    >
-                                        Change
-                                    </button>
-                                </div>
-                            )}
-                        </div>
                     </div>
                 </div>
             </header>
 
-            <main className="flex-grow-1 container py-4">
+            <main className="flex-grow-1 zen-container py-4">
                 <Outlet />
             </main>
         </div>

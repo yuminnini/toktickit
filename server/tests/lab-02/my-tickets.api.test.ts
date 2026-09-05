@@ -16,31 +16,41 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
 
   beforeAll(async () => {
     const prisma = getPrisma();
-    const requesters = await prisma.requesterUser.findMany({
-      where: { active: true },
-      take: 2,
-    });
-    const inactiveReq = await prisma.requesterUser.findFirst({
-      where: { active: false },
-    });
     const categories = await prisma.category.findMany({ take: 2 });
     const system = await prisma.relatedSystem.findFirst({ where: { active: true } });
 
-    if (requesters.length < 2 || !inactiveReq || categories.length < 2 || !system) {
+    if (categories.length < 2 || !system) {
       throw new Error("Seeded test data missing for My Tickets tests");
     }
 
-    requesterAId = requesters[0].id;
-    requesterBId = requesters[1].id;
-    inactiveRequesterId = inactiveReq.id;
+    const userA = await prisma.requesterUser.create({
+      data: {
+        name: "MyTickets Tester A",
+        email: `mytickets-tester-a-${Date.now()}-${Math.random()}@example.com`,
+        active: true,
+      },
+    });
+    const userB = await prisma.requesterUser.create({
+      data: {
+        name: "MyTickets Tester B",
+        email: `mytickets-tester-b-${Date.now()}-${Math.random()}@example.com`,
+        active: true,
+      },
+    });
+    const inactiveUser = await prisma.requesterUser.create({
+      data: {
+        name: "MyTickets Inactive Tester",
+        email: `mytickets-inactive-${Date.now()}-${Math.random()}@example.com`,
+        active: false,
+      },
+    });
+
+    requesterAId = userA.id;
+    requesterBId = userB.id;
+    inactiveRequesterId = inactiveUser.id;
     category1Id = categories[0].id;
     category2Id = categories[1].id;
     relatedSystemId = system.id;
-
-    // Clean up any existing tickets for test requesters first for deterministic counts
-    await prisma.ticket.deleteMany({
-      where: { requesterId: { in: [requesterAId, requesterBId] } },
-    });
 
     // Seed 15 tickets for requesterA
     for (let i = 1; i <= 15; i++) {
@@ -92,8 +102,13 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
 
   afterAll(async () => {
     const prisma = getPrisma();
-    await prisma.ticket.deleteMany({
-      where: { id: { in: createdTicketIds } },
+    if (createdTicketIds.length > 0) {
+      await prisma.ticket.deleteMany({
+        where: { id: { in: createdTicketIds } },
+      });
+    }
+    await prisma.requesterUser.deleteMany({
+      where: { id: { in: [requesterAId, requesterBId, inactiveRequesterId] } },
     });
   });
 
@@ -211,5 +226,33 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("BAD_REQUESTER");
+  });
+
+  it("supports X-Requester-Id header for contract compatibility", async () => {
+    const res = await request(app)
+      .get("/api/tickets")
+      .set("X-Requester-Id", String(requesterAId));
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(15);
+  });
+
+  it("provides ticketNo alias alongside ticketNumber in response", async () => {
+    const res = await request(app)
+      .get("/api/tickets")
+      .query({ requesterId: requesterAId, page: 1, pageSize: 1 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data[0].ticketNumber).toBeDefined();
+    expect(res.body.data[0].ticketNo).toBe(res.body.data[0].ticketNumber);
+  });
+
+  it("supports itPriority filter parameter as an alias", async () => {
+    const res = await request(app)
+      .get("/api/tickets")
+      .query({ requesterId: requesterAId, itPriority: "HIGH" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.every((t: { requestedPriority: string }) => t.requestedPriority === "HIGH")).toBe(true);
   });
 });

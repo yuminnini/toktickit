@@ -169,6 +169,11 @@ describe("CreateTicket Component (UI-02, UI-03, UI-04)", () => {
     await waitFor(() => {
       expect(screen.getByText("TKT-2026-000099")).toBeInTheDocument();
       expect(screen.getByText(/1 attachment\(s\) could not be uploaded/i)).toBeInTheDocument();
+      expect(screen.getByText(/Failed file\(s\):/i)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /go to ticket detail to attach files/i })).toHaveAttribute(
+        "href",
+        "/tickets/99"
+      );
     });
   });
 });

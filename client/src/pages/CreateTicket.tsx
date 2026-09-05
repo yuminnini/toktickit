@@ -27,6 +27,7 @@ export default function CreateTicket() {
   const [requestedPriority, setRequestedPriority] = useState<PriorityType>("MEDIUM");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [uploadWarning, setUploadWarning] = useState<string | null>(null);
+  const [failedAttachments, setFailedAttachments] = useState<string[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [apiError, setApiError] = useState<string | null>(null);
@@ -142,18 +143,19 @@ export default function CreateTicket() {
       });
 
       if (attachments.length > 0) {
-        let failedCount = 0;
+        const failed: string[] = [];
         for (const file of attachments) {
           try {
             await uploadAttachment(ticket.id, requester.id, file);
           } catch (attErr) {
             console.error("Failed to upload attachment:", file.name, attErr);
-            failedCount++;
+            failed.push(file.name);
           }
         }
-        if (failedCount > 0) {
+        if (failed.length > 0) {
+          setFailedAttachments(failed);
           setUploadWarning(
-            `Ticket created, but ${failedCount} attachment(s) could not be uploaded.`
+            `Ticket created, but ${failed.length} attachment(s) could not be uploaded: ${failed.join(", ")}.`
           );
         }
       }
@@ -175,40 +177,68 @@ export default function CreateTicket() {
     setDescription("");
     setAttachments([]);
     setUploadWarning(null);
+    setFailedAttachments([]);
     setErrors({});
     setApiError(null);
   }
 
   if (createdTicket) {
     return (
-      <div className="container py-4" style={{ maxWidth: 720 }}>
+      <div className="zen-container py-4" style={{ maxWidth: 720 }}>
         <div
-          className="card p-4 shadow-sm text-center"
+          className="zen-card text-center"
           style={{
             backgroundColor: "var(--color-pale-green)",
-            borderColor: "var(--color-secondary)",
+            borderColor: "var(--badge-prio-low-border)",
           }}
         >
-          <div className="display-6 mb-3">✅</div>
-          <h2 className="h4 mb-2" style={{ color: "var(--color-primary)" }}>
+          <div className="mb-3" style={{ fontSize: "2.5rem" }}>
+            ✅
+          </div>
+          <h2 className="h4 mb-2">
             Ticket Submitted Successfully!
           </h2>
-          <p className="text-muted mb-3">Your official Ticket Number has been generated:</p>
-          <div className="display-6 fw-bold mb-4" style={{ color: "var(--color-primary)" }}>
+          <p className="text-muted mb-3 small">Your official Ticket Number has been generated:</p>
+          <div
+            className="display-6 fw-bold mb-4 font-monospace"
+            style={{ color: "var(--color-primary)" }}
+          >
             {createdTicket.ticketNumber}
           </div>
 
           {uploadWarning && (
-            <div className="alert alert-warning mb-3 py-2 px-3 small" role="alert">
-              ⚠️ {uploadWarning}
+            <div className="alert alert-warning mb-4 py-3 px-3 text-start small" role="alert">
+              <div className="fw-semibold mb-1">⚠️ {uploadWarning}</div>
+              {failedAttachments.length > 0 && (
+                <div className="mt-2">
+                  <div className="text-muted mb-2">
+                    Failed file(s): <strong>{failedAttachments.join(", ")}</strong>
+                  </div>
+                  <div>
+                    You can re-attach your file(s) on the Ticket Detail page:
+                  </div>
+                  <div className="mt-2">
+                    <Link
+                      to={`/tickets/${createdTicket.id}`}
+                      className="btn-zen-secondary btn-sm d-inline-flex align-items-center gap-1"
+                    >
+                      📎 Go to Ticket Detail to Attach Files
+                    </Link>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          <div className="d-flex justify-content-center gap-3">
-            <Link to="/my-tickets" className="btn btn-success">
+          <div className="d-flex justify-content-center gap-3 flex-wrap">
+            <Link to="/my-tickets" className="btn-zen-primary">
               View My Tickets
             </Link>
-            <button className="btn btn-outline-secondary" onClick={handleCreateAnother}>
+            <button
+              type="button"
+              className="btn-zen-secondary"
+              onClick={handleCreateAnother}
+            >
               Create Another Ticket
             </button>
           </div>
@@ -218,8 +248,8 @@ export default function CreateTicket() {
   }
 
   return (
-    <div className="container py-2" style={{ maxWidth: 720 }}>
-      <h1 className="h4 mb-3" style={{ color: "var(--color-primary)" }}>
+    <div className="zen-container py-2" style={{ maxWidth: 760 }}>
+      <h1 className="h4 mb-4">
         Create Ticket
       </h1>
 
@@ -232,53 +262,57 @@ export default function CreateTicket() {
       {refError && (
         <div className="alert alert-warning mb-4 d-flex justify-content-between align-items-center" role="alert">
           <span>Unable to load Categories or Related Systems.</span>
-          <button className="btn btn-outline-warning btn-sm text-dark" onClick={loadReferenceData}>
+          <button
+            type="button"
+            className="btn btn-outline-warning btn-sm text-dark"
+            onClick={loadReferenceData}
+          >
             Retry
           </button>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} noValidate>
-        {/* Read-only Context Row */}
+      <form onSubmit={handleSubmit} noValidate className="zen-card">
+        {/* Read-only Context Row (Ticket Date + Requester) */}
         <div className="row g-3 mb-3">
-          <div className="col-md-6">
+          <div className="col-12 col-md-6">
             <label className="form-label fw-semibold text-muted small">Ticket Date</label>
             <input
               type="text"
-              className="form-control"
-              style={{ backgroundColor: "var(--color-readonly-bg)", cursor: "default" }}
+              className="form-control form-control-readonly-zen"
               value="Assigned on creation"
               readOnly
               disabled
+              aria-label="Ticket Date"
             />
           </div>
-          <div className="col-md-6">
+          <div className="col-12 col-md-6">
             <label className="form-label fw-semibold text-muted small">Requester</label>
             <input
               type="text"
-              className="form-control"
-              style={{ backgroundColor: "var(--color-readonly-bg)", cursor: "default" }}
+              className="form-control form-control-readonly-zen"
               value={requester ? requester.name : ""}
               readOnly
               disabled
+              aria-label="Requester"
             />
           </div>
         </div>
 
-        {/* Classification Group */}
+        {/* Classification Group (Category + Related System) */}
         <div className="row g-3 mb-3">
-          <div className="col-md-6">
-            <label htmlFor="categoryId" className="form-label fw-semibold">
-              Category <span className="text-danger">*</span>
+          <div className="col-12 col-md-6">
+            <label htmlFor="categoryId" className="form-label fw-semibold small">
+              Category <span className="required-marker">*</span>
             </label>
             <select
               id="categoryId"
               ref={categorySelectRef}
-              className={`form-select ${errors.categoryId ? "is-invalid" : ""}`}
+              className={`form-select form-control-zen ${errors.categoryId ? "is-invalid" : ""}`}
               value={categoryId}
               onChange={(e) => setCategoryId(Number(e.target.value))}
               aria-describedby={errors.categoryId ? "categoryId-error" : undefined}
-              disabled={isRefLoading || refError}
+              disabled={isRefLoading || refError || isSubmitting}
             >
               <option value="" disabled>{isRefLoading ? "Loading..." : "Select Category"}</option>
               {categories.map((c) => (
@@ -288,24 +322,24 @@ export default function CreateTicket() {
               ))}
             </select>
             {errors.categoryId && (
-              <div id="categoryId-error" className="invalid-feedback d-block small" role="alert">
-                {errors.categoryId}
+              <div id="categoryId-error" className="zen-error-text" role="alert">
+                <span>⚠️</span> <span>{errors.categoryId}</span>
               </div>
             )}
           </div>
 
-          <div className="col-md-6">
-            <label htmlFor="relatedSystemId" className="form-label fw-semibold">
-              Related System <span className="text-danger">*</span>
+          <div className="col-12 col-md-6">
+            <label htmlFor="relatedSystemId" className="form-label fw-semibold small">
+              Related System <span className="required-marker">*</span>
             </label>
             <select
               id="relatedSystemId"
               ref={relatedSystemSelectRef}
-              className={`form-select ${errors.relatedSystemId ? "is-invalid" : ""}`}
+              className={`form-select form-control-zen ${errors.relatedSystemId ? "is-invalid" : ""}`}
               value={relatedSystemId}
               onChange={(e) => setRelatedSystemId(Number(e.target.value))}
               aria-describedby={errors.relatedSystemId ? "relatedSystemId-error" : undefined}
-              disabled={isRefLoading || refError}
+              disabled={isRefLoading || refError || isSubmitting}
             >
               <option value="" disabled>{isRefLoading ? "Loading..." : "Select System"}</option>
               {relatedSystems.map((s) => (
@@ -315,8 +349,8 @@ export default function CreateTicket() {
               ))}
             </select>
             {errors.relatedSystemId && (
-              <div id="relatedSystemId-error" className="invalid-feedback d-block small" role="alert">
-                {errors.relatedSystemId}
+              <div id="relatedSystemId-error" className="zen-error-text" role="alert">
+                <span>⚠️</span> <span>{errors.relatedSystemId}</span>
               </div>
             )}
           </div>
@@ -324,60 +358,64 @@ export default function CreateTicket() {
 
         {/* Summary */}
         <div className="mb-3">
-          <label htmlFor="summary" className="form-label fw-semibold">
-            Summary <span className="text-danger">*</span>
+          <label htmlFor="summary" className="form-label fw-semibold small">
+            Summary <span className="required-marker">*</span>
           </label>
           <input
             id="summary"
             ref={summaryInputRef}
             type="text"
-            className={`form-control ${errors.summary ? "is-invalid" : ""}`}
+            className={`form-control form-control-zen ${errors.summary ? "is-invalid" : ""}`}
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
             maxLength={150}
             placeholder="Brief description of the problem (max 150 chars)"
             aria-describedby={errors.summary ? "summary-error" : undefined}
+            disabled={isSubmitting}
           />
           {errors.summary && (
-            <div id="summary-error" className="invalid-feedback d-block small" role="alert">
-              ⚠️ {errors.summary}
+            <div id="summary-error" className="zen-error-text" role="alert">
+              <span>⚠️</span> <span>{errors.summary}</span>
             </div>
           )}
         </div>
 
         {/* Description */}
         <div className="mb-3">
-          <label htmlFor="description" className="form-label fw-semibold">
-            Description <span className="text-danger">*</span>
+          <label htmlFor="description" className="form-label fw-semibold small">
+            Description <span className="required-marker">*</span>
           </label>
           <textarea
             id="description"
             ref={descriptionInputRef}
             rows={5}
-            className={`form-control ${errors.description ? "is-invalid" : ""}`}
+            className={`form-control form-control-zen ${errors.description ? "is-invalid" : ""}`}
+            style={{ resize: "vertical", minHeight: "120px" }}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             maxLength={2000}
             placeholder="Detailed description of what occurred, steps to reproduce, etc."
             aria-describedby={errors.description ? "description-error" : undefined}
+            disabled={isSubmitting}
           />
           {errors.description && (
-            <div id="description-error" className="invalid-feedback d-block small" role="alert">
-              ⚠️ {errors.description}
+            <div id="description-error" className="zen-error-text" role="alert">
+              <span>⚠️</span> <span>{errors.description}</span>
             </div>
           )}
         </div>
 
-        {/* Priority */}
+        {/* Requested Priority */}
         <div className="mb-4">
-          <label htmlFor="requestedPriority" className="form-label fw-semibold">
+          <label htmlFor="requestedPriority" className="form-label fw-semibold small">
             Requested Priority
           </label>
           <select
             id="requestedPriority"
-            className="form-select"
+            className="form-select form-control-zen"
             value={requestedPriority}
             onChange={(e) => setRequestedPriority(e.target.value as PriorityType)}
+            disabled={isSubmitting}
           >
             <option value="LOW">Low</option>
             <option value="MEDIUM">Medium</option>
@@ -385,7 +423,7 @@ export default function CreateTicket() {
           </select>
         </div>
 
-        {/* Attachments */}
+        {/* Attachments Picker */}
         <AttachmentPicker
           files={attachments}
           onChange={setAttachments}
@@ -393,11 +431,11 @@ export default function CreateTicket() {
           disabled={isSubmitting}
         />
 
-        {/* Form Actions */}
-        <div className="d-flex justify-content-end gap-2 pt-2">
+        {/* Form Action Row */}
+        <div className="d-flex justify-content-end gap-2 pt-3 border-top mt-4 flex-wrap">
           <button
             type="button"
-            className="btn btn-outline-secondary"
+            className="btn-zen-secondary"
             onClick={() => navigate("/my-tickets")}
             disabled={isSubmitting}
           >
@@ -405,8 +443,7 @@ export default function CreateTicket() {
           </button>
           <button
             type="submit"
-            className="btn btn-success"
-            style={{ backgroundColor: "var(--color-primary)", borderColor: "var(--color-primary)" }}
+            className="btn-zen-primary"
             disabled={isSubmitting}
           >
             {isSubmitting ? (

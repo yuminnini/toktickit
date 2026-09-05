@@ -73,35 +73,33 @@ export default function TicketDetail() {
 
   if (loading) {
     return (
-      <div className="container py-5 text-center">
-        <div className="spinner-border text-primary" role="status">
+      <div className="zen-container py-5 text-center" role="status">
+        <div className="spinner-border text-success" role="status">
           <span className="visually-hidden">Loading ticket…</span>
         </div>
-        <p className="text-muted mt-2">Loading ticket details…</p>
+        <p className="text-muted mt-2 small">Loading ticket details…</p>
       </div>
     );
   }
 
   if (isNotFound) {
     return (
-      <div className="container py-5">
-        <div className="card shadow-sm border text-center py-5 not-found-state">
-          <div className="card-body">
-            <div className="mb-3 text-muted" style={{ fontSize: "2.5rem" }}>
-              🔒
-            </div>
-            <h4 className="fw-bold mb-2">Ticket Not Found</h4>
-            <p className="text-muted mb-4" style={{ maxWidth: "450px", margin: "0 auto" }}>
-              The ticket you requested does not exist, or you do not have permission to view it.
-            </p>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => navigate("/my-tickets")}
-            >
-              &larr; Back to My Tickets
-            </button>
+      <div className="zen-container py-5">
+        <div className="zen-card text-center py-5 not-found-state">
+          <div className="mb-3 text-muted" style={{ fontSize: "2.5rem" }}>
+            🔒
           </div>
+          <h2 className="h4 mb-2">Ticket Not Found</h2>
+          <p className="text-muted mb-4 small" style={{ maxWidth: "450px", margin: "0 auto" }}>
+            The ticket you requested does not exist, or you do not have permission to view it.
+          </p>
+          <button
+            type="button"
+            className="btn-zen-primary"
+            onClick={() => navigate("/my-tickets")}
+          >
+            &larr; Back to My Tickets
+          </button>
         </div>
       </div>
     );
@@ -109,13 +107,13 @@ export default function TicketDetail() {
 
   if (error || !ticket) {
     return (
-      <div className="container py-5">
-        <div className="alert alert-danger" role="alert">
+      <div className="zen-container py-5">
+        <div className="alert alert-danger mb-4" role="alert">
           {error || "An unexpected error occurred."}
         </div>
         <button
           type="button"
-          className="btn btn-outline-secondary"
+          className="btn-zen-secondary"
           onClick={() => navigate("/my-tickets")}
         >
           &larr; Back to My Tickets
@@ -125,19 +123,20 @@ export default function TicketDetail() {
   }
 
   return (
-    <div className="container py-4">
+    <div className="zen-container py-4">
       {/* Header and Back Link */}
       <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2 mb-4">
         <div>
           <button
             type="button"
-            className="btn btn-link text-decoration-none p-0 mb-2 d-inline-flex align-items-center gap-1 text-muted small"
+            className="btn-zen-tertiary p-0 mb-2 small"
             onClick={() => navigate("/my-tickets")}
+            aria-label="Back to My Tickets"
           >
             &larr; Back to My Tickets
           </button>
-          <div className="d-flex align-items-center gap-3">
-            <h1 className="h3 fw-bold font-monospace mb-0 ticket-number">
+          <div className="d-flex align-items-center gap-3 flex-wrap">
+            <h1 className="h3 font-monospace mb-0 ticket-number" style={{ color: "var(--color-primary)" }}>
               {ticket.ticketNumber}
             </h1>
             <Badge type="status" value={ticket.currentStatus} />
@@ -161,21 +160,19 @@ export default function TicketDetail() {
       <div className="row g-4">
         {/* Left Column: Summary and Description */}
         <div className="col-12 col-lg-8">
-          <div className="card shadow-sm border mb-4">
-            <div className="card-body p-4">
-              <h5 className="card-title fw-bold mb-3 ticket-summary">
-                {ticket.summary}
-              </h5>
+          <div className="zen-card mb-4">
+            <h2 className="h5 fw-bold mb-3 ticket-summary" style={{ color: "var(--color-text)" }}>
+              {ticket.summary}
+            </h2>
 
-              <h6 className="text-muted small fw-bold text-uppercase mt-4 mb-2">
-                Description
-              </h6>
-              <div
-                className="bg-light p-3 rounded border text-break ticket-description"
-                style={{ whiteSpace: "pre-wrap" }}
-              >
-                {ticket.description}
-              </div>
+            <div className="text-muted small fw-bold text-uppercase mt-4 mb-2">
+              Description
+            </div>
+            <div
+              className="form-control-readonly-zen p-3 rounded border text-break ticket-description"
+              style={{ whiteSpace: "pre-wrap", minHeight: "100px" }}
+            >
+              {ticket.description}
             </div>
           </div>
 
@@ -190,11 +187,14 @@ export default function TicketDetail() {
 
         {/* Right Column: Metadata Details */}
         <div className="col-12 col-lg-4">
-          <div className="card shadow-sm border">
-            <div className="card-header bg-light fw-bold py-3">
+          <div className="zen-card">
+            <div
+              className="fw-bold py-2 mb-3 border-bottom"
+              style={{ color: "var(--color-primary)", fontSize: "16px" }}
+            >
               Ticket Details
             </div>
-            <div className="card-body p-3">
+            <div>
               <div className="mb-3">
                 <div className="text-muted small mb-1">Priority</div>
                 <div>

@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import "./styles/theme.css";
 import "bootstrap/dist/css/bootstrap.min.css";
+import "./styles/theme.css";
 import App from "./App.js";
 import { RequesterProvider } from "./context/RequesterContext";
 

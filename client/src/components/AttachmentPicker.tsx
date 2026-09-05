@@ -85,29 +85,33 @@ export const AttachmentPicker: React.FC<AttachmentPickerProps> = ({
 
   return (
     <div className="attachment-picker mb-3">
-      <label htmlFor="attachment-input" className="form-label fw-bold">
+      <label htmlFor="attachment-input" className="form-label fw-semibold small">
         Attachments{" "}
         <span className="text-muted fw-normal">
-          (Optional, max {maxFiles} files, up to 5 MB each. Allowed: JPG, PNG, WEBP, PDF)
+          (Optional, max {maxFiles} files, up to 5 MB each)
         </span>
       </label>
 
-      <div className="d-flex align-items-center gap-2 mb-2">
+      <div className="d-flex align-items-center gap-2 mb-1">
         <input
           id="attachment-input"
           ref={fileInputRef}
           type="file"
-          className="form-control"
+          className="form-control form-control-zen"
           accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
           onChange={handleFileChange}
           disabled={disabled || files.length >= maxFiles}
-          aria-describedby={errorMessage ? "attachment-error" : undefined}
+          aria-describedby={errorMessage ? "attachment-error" : "attachment-hint"}
         />
       </div>
 
+      <div id="attachment-hint" className="text-muted small mb-2" style={{ fontSize: "12px" }}>
+        Accepted formats: JPG, PNG, WEBP, PDF — up to 5MB, max {maxFiles} files.
+      </div>
+
       {errorMessage && (
-        <div id="attachment-error" className="alert alert-danger py-2 px-3 small" role="alert">
-          {errorMessage}
+        <div id="attachment-error" className="alert alert-danger py-2 px-3 small mb-2" role="alert">
+          ⚠️ {errorMessage}
         </div>
       )}
 
@@ -122,25 +126,26 @@ export const AttachmentPicker: React.FC<AttachmentPickerProps> = ({
           {files.map((file, idx) => (
             <li
               key={`${file.name}-${idx}`}
-              className="list-group-item d-flex justify-content-between align-items-center py-2"
+              className="list-group-item d-flex justify-content-between align-items-center py-2 px-3 flex-wrap gap-2"
             >
               <div className="d-flex align-items-center gap-2 text-truncate">
                 <span className="badge bg-secondary">
                   {file.name.split(".").pop()?.toUpperCase() || "FILE"}
                 </span>
-                <span className="text-truncate fw-medium" title={file.name}>
+                <span className="text-truncate-filename fw-medium" title={file.name}>
                   {file.name}
                 </span>
                 <span className="text-muted small">({formatBytes(file.size)})</span>
               </div>
               <button
                 type="button"
-                className="btn btn-outline-danger btn-sm"
+                className="btn-zen-destructive btn-sm"
                 onClick={() => handleRemove(idx)}
                 disabled={disabled}
                 aria-label={`Remove ${file.name}`}
+                title={`Remove ${file.name}`}
               >
-                Remove
+                ✕ Remove
               </button>
             </li>
           ))}

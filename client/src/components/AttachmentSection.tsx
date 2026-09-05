@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   AttachmentItem,
   uploadAttachment,
@@ -32,9 +32,35 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
   const [isSubmittingRemoval, setIsSubmittingRemoval] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastActiveElementRef = useRef<HTMLElement | null>(null);
+  const reasonInputRef = useRef<HTMLTextAreaElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  // Focus textarea when modal opens, and listen for Escape key
+  useEffect(() => {
+    if (!removingAttachment) return;
+
+    // Move focus into the modal textarea
+    const timer = setTimeout(() => {
+      reasonInputRef.current?.focus();
+    }, 50);
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (!isSubmittingRemoval) {
+          handleCloseRemoveModal();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [removingAttachment, isSubmittingRemoval]);
 
   const activeAttachments = attachments.filter((a) => !a.removedAt);
-  const removedAttachments = attachments.filter((a) => !!a.removedAt);
   const canUploadMore = activeAttachments.length < 5;
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -69,6 +95,7 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
   };
 
   const handleOpenRemoveModal = (att: AttachmentItem) => {
+    lastActiveElementRef.current = document.activeElement as HTMLElement;
     setRemovingAttachment(att);
     setRemovalReason("");
     setRemovalError(null);
@@ -79,6 +106,10 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
     setRemovingAttachment(null);
     setRemovalReason("");
     setRemovalError(null);
+    // Restore focus to the button that triggered the modal
+    setTimeout(() => {
+      lastActiveElementRef.current?.focus();
+    }, 0);
   };
 
   const handleSubmitRemoval = async (e: React.FormEvent) => {
@@ -101,6 +132,9 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
       await removeAttachment(removingAttachment.id, requesterId, trimmed);
       setRemovingAttachment(null);
       onAttachmentChanged();
+      setTimeout(() => {
+        lastActiveElementRef.current?.focus();
+      }, 0);
     } catch (err: any) {
       setRemovalError(err.message || "Failed to remove attachment");
     } finally {
@@ -109,17 +143,17 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
   };
 
   return (
-    <div className="attachment-section card mb-4">
-      <div className="card-header d-flex justify-content-between align-items-center bg-light">
-        <h5 className="card-title mb-0 fs-6 fw-bold">
+    <div className="attachment-section zen-card mb-4 p-4">
+      <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+        <h3 className="h6 mb-0 fw-bold" style={{ color: "var(--color-primary)" }}>
           Attachments ({activeAttachments.length}/5 active)
-        </h5>
+        </h3>
       </div>
 
-      <div className="card-body">
+      <div>
         {uploadError && (
           <div className="alert alert-danger py-2 px-3 small mb-3" role="alert">
-            {uploadError}
+            ⚠️ {uploadError}
           </div>
         )}
 
@@ -133,21 +167,22 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
                 <li
                   key={att.id}
                   className={`list-group-item px-0 py-3 border-bottom ${
-                    isRemoved ? "bg-light text-muted opacity-75" : ""
+                    isRemoved ? "text-muted opacity-75" : ""
                   }`}
                   data-testid={`attachment-item-${att.id}`}
                 >
-                  <div className="d-flex justify-content-between align-items-start gap-2">
+                  <div className="d-flex justify-content-between align-items-start gap-2 flex-wrap">
                     <div className="d-flex align-items-start gap-2 text-truncate">
                       <span
-                        className={`badge mt-1 ${isRemoved ? "bg-secondary" : "bg-primary"}`}
+                        className={`badge mt-1 ${isRemoved ? "bg-secondary" : "bg-success"}`}
+                        style={{ backgroundColor: isRemoved ? undefined : "var(--color-primary)" }}
                       >
                         {att.originalName.split(".").pop()?.toUpperCase() || "FILE"}
                       </span>
                       <div>
                         <div className="d-flex align-items-center gap-2 flex-wrap">
                           <span
-                            className={`fw-medium ${
+                            className={`fw-medium text-truncate-filename ${
                               isRemoved ? "text-decoration-line-through" : ""
                             }`}
                             title={att.originalName}
@@ -162,12 +197,19 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
                           )}
                         </div>
 
-                        <div className="text-muted small mt-1">
+                        <div className="text-muted small mt-1" style={{ fontSize: "12px" }}>
                           Uploaded: {new Date(att.uploadedAt).toLocaleString()}
                         </div>
 
                         {isRemoved && (
-                          <div className="alert alert-warning py-1 px-2 small mt-2 mb-0">
+                          <div
+                            className="alert small py-1 px-2 mt-2 mb-0"
+                            style={{
+                              backgroundColor: "var(--badge-prio-med-bg)",
+                              borderColor: "var(--badge-prio-med-border)",
+                              color: "var(--badge-prio-med-text)",
+                            }}
+                          >
                             <strong>Removal Reason:</strong> {att.removalReason}
                             {att.removedAt && (
                               <span className="text-muted ms-2">
@@ -180,12 +222,13 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
                     </div>
 
                     {!readOnly && !isRemoved && (
-                      <div className="d-flex gap-2 flex-shrink-0">
+                      <div className="d-flex gap-2 flex-shrink-0 align-items-center">
                         <a
                           href={getAttachmentDownloadUrl(att.id, requesterId)}
-                          className="btn btn-outline-primary btn-sm"
+                          className="btn-zen-secondary btn-sm"
                           download={att.originalName}
                           aria-label={`Download ${att.originalName}`}
+                          title={`Download ${att.originalName}`}
                           target="_blank"
                           rel="noreferrer"
                         >
@@ -193,9 +236,10 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
                         </a>
                         <button
                           type="button"
-                          className="btn btn-outline-danger btn-sm"
+                          className="btn-zen-destructive btn-sm"
                           onClick={() => handleOpenRemoveModal(att)}
                           aria-label={`Remove ${att.originalName}`}
+                          title={`Remove ${att.originalName}`}
                         >
                           Remove
                         </button>
@@ -211,33 +255,44 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
         {/* Upload form for ticket detail */}
         {!readOnly && (
           <div className="mt-3 pt-3 border-top">
-            <h6 className="fw-semibold small mb-2">Add New Attachment</h6>
+            <h4 className="h6 fw-semibold mb-2" style={{ fontSize: "14px" }}>
+              Add New Attachment
+            </h4>
             {canUploadMore ? (
-              <div className="d-flex align-items-center gap-2">
+              <div className="d-flex align-items-center gap-2 flex-wrap">
                 <input
                   ref={fileInputRef}
                   type="file"
-                  className="form-control form-control-sm"
+                  className="form-control form-control-zen"
+                  style={{ maxWidth: "340px" }}
                   accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
                   onChange={handleFileSelect}
                   disabled={uploading}
                   aria-label="Select file to upload"
                 />
                 {uploading && (
-                  <span className="spinner-border spinner-border-sm text-primary" role="status">
-                    <span className="visually-hidden">Uploading...</span>
-                  </span>
+                  <div className="d-flex align-items-center gap-1 text-success small" role="status">
+                    <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+                    <span>Uploading…</span>
+                  </div>
                 )}
               </div>
             ) : (
-              <div className="alert alert-info py-2 px-3 small mb-0">
+              <div
+                className="alert small py-2 px-3 mb-0"
+                style={{
+                  backgroundColor: "var(--color-pale-green)",
+                  borderColor: "var(--badge-prio-low-border)",
+                  color: "var(--color-primary)",
+                }}
+              >
                 This ticket has reached the maximum quota of 5 active attachments. Remove an
                 existing attachment to upload another.
               </div>
             )}
-            <small className="text-muted d-block mt-1">
+            <div className="text-muted small mt-1" style={{ fontSize: "12px" }}>
               Max 5 MB per file. Allowed formats: JPG, JPEG, PNG, WEBP, PDF.
-            </small>
+            </div>
           </div>
         )}
       </div>
@@ -245,15 +300,18 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
       {/* Soft-remove modal */}
       {removingAttachment && (
         <div
+          ref={modalRef}
           className="modal fade show d-block"
           tabIndex={-1}
           role="dialog"
           style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          aria-modal="true"
+          aria-labelledby="remove-attachment-title"
         >
           <div className="modal-dialog modal-dialog-centered" role="document">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title fs-6 fw-bold">Remove Attachment</h5>
+            <div className="modal-content zen-card p-0">
+              <div className="modal-header border-bottom px-4 py-3">
+                <h5 id="remove-attachment-title" className="modal-title fs-6 fw-bold">Remove Attachment</h5>
                 <button
                   type="button"
                   className="btn-close"
@@ -263,7 +321,7 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
                 />
               </div>
               <form onSubmit={handleSubmitRemoval}>
-                <div className="modal-body">
+                <div className="modal-body px-4 py-3">
                   <p className="small mb-3">
                     Are you sure you want to remove{" "}
                     <strong>{removingAttachment.originalName}</strong>? This attachment will be
@@ -272,17 +330,18 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
 
                   {removalError && (
                     <div className="alert alert-danger py-2 px-3 small mb-3" role="alert">
-                      {removalError}
+                      ⚠️ {removalError}
                     </div>
                   )}
 
                   <div className="mb-3">
-                    <label htmlFor="removal-reason-input" className="form-label small fw-bold">
-                      Reason for removal <span className="text-danger">*</span>
+                    <label htmlFor="removal-reason-input" className="form-label small fw-semibold">
+                      Reason for removal <span className="required-marker">*</span>
                     </label>
                     <textarea
+                      ref={reasonInputRef}
                       id="removal-reason-input"
-                      className="form-control form-control-sm"
+                      className="form-control form-control-zen"
                       rows={3}
                       value={removalReason}
                       onChange={(e) => setRemovalReason(e.target.value)}
@@ -291,16 +350,16 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
                       required
                       disabled={isSubmittingRemoval}
                     />
-                    <div className="d-flex justify-content-between small text-muted mt-1">
+                    <div className="d-flex justify-content-between small text-muted mt-1" style={{ fontSize: "12px" }}>
                       <span>A removal reason is required.</span>
                       <span>{removalReason.trim().length}/500</span>
                     </div>
                   </div>
                 </div>
-                <div className="modal-footer">
+                <div className="modal-footer border-top px-4 py-3 gap-2">
                   <button
                     type="button"
-                    className="btn btn-secondary btn-sm"
+                    className="btn-zen-secondary btn-sm"
                     onClick={handleCloseRemoveModal}
                     disabled={isSubmittingRemoval}
                   >
@@ -308,7 +367,7 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
                   </button>
                   <button
                     type="submit"
-                    className="btn btn-danger btn-sm"
+                    className="btn-zen-destructive btn-sm"
                     disabled={isSubmittingRemoval || removalReason.trim().length === 0}
                   >
                     {isSubmittingRemoval ? (

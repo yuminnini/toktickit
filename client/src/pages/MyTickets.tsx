@@ -30,7 +30,7 @@ export default function MyTickets() {
   const [sortField, setSortField] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(10);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -142,18 +142,18 @@ export default function MyTickets() {
     (hasActiveFilters || ticketsData.unfilteredTotal > 0);
 
   return (
-    <div className="container py-4">
+    <div className="zen-container py-4">
       {/* Page Header */}
       <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-3 mb-4">
         <div>
-          <h1 className="h3 fw-bold mb-1">My Tickets</h1>
-          <p className="text-muted mb-0">
+          <h1 className="h3 mb-1">My Tickets</h1>
+          <p className="text-muted mb-0 small">
             View and track your submitted IT support tickets
           </p>
         </div>
         <button
           type="button"
-          className="btn btn-primary d-inline-flex align-items-center gap-2"
+          className="btn-zen-primary d-inline-flex align-items-center gap-2"
           onClick={() => navigate("/tickets/new")}
         >
           <span className="fw-bold">+</span> Create Ticket
@@ -161,128 +161,161 @@ export default function MyTickets() {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="card shadow-sm border mb-4">
-        <div className="card-body">
-          <div className="row g-3">
-            {/* Search */}
-            <div className="col-12 col-md-4">
-              <label htmlFor="ticket-search" className="form-label small fw-semibold text-muted">
-                Search
-              </label>
-              <input
-                id="ticket-search"
-                type="text"
-                className="form-control form-control-sm"
-                placeholder="Search by ticket number or summary…"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-              />
-            </div>
+      <div className="zen-card mb-4">
+        <div className="row g-3">
+          {/* Search */}
+          <div className="col-12 col-lg-4">
+            <label htmlFor="ticket-search" className="form-label small fw-semibold text-muted">
+              Search
+            </label>
+            <input
+              id="ticket-search"
+              type="text"
+              className="form-control form-control-zen"
+              placeholder="Search by ticket number or summary…"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
 
-            {/* Category */}
-            <div className="col-6 col-md-2">
-              <label htmlFor="ticket-cat-filter" className="form-label small fw-semibold text-muted">
-                Category
-              </label>
-              <select
-                id="ticket-cat-filter"
-                className="form-select form-select-sm"
-                value={selectedCategory}
-                onChange={(e) => {
-                  setSelectedCategory(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="">All Categories</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Category */}
+          <div className="col-6 col-sm-3 col-lg-2">
+            <label htmlFor="ticket-cat-filter" className="form-label small fw-semibold text-muted">
+              Category
+            </label>
+            <select
+              id="ticket-cat-filter"
+              className="form-select form-control-zen"
+              value={selectedCategory}
+              onChange={(e) => {
+                setSelectedCategory(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">All Categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            {/* Priority */}
-            <div className="col-6 col-md-2">
-              <label htmlFor="ticket-prio-filter" className="form-label small fw-semibold text-muted">
-                Priority
-              </label>
-              <select
-                id="ticket-prio-filter"
-                className="form-select form-select-sm"
-                value={selectedPriority}
-                onChange={(e) => {
-                  setSelectedPriority(e.target.value as PriorityType | "");
-                  setPage(1);
-                }}
-              >
-                <option value="">All Priorities</option>
-                <option value="LOW">Low</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="HIGH">High</option>
-              </select>
-            </div>
+          {/* Priority */}
+          <div className="col-6 col-sm-3 col-lg-2">
+            <label htmlFor="ticket-prio-filter" className="form-label small fw-semibold text-muted">
+              Priority
+            </label>
+            <select
+              id="ticket-prio-filter"
+              className="form-select form-control-zen"
+              value={selectedPriority}
+              onChange={(e) => {
+                setSelectedPriority(e.target.value as PriorityType | "");
+                setPage(1);
+              }}
+            >
+              <option value="">All Priorities</option>
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+            </select>
+          </div>
 
-            {/* Status */}
-            <div className="col-6 col-md-2">
-              <label htmlFor="ticket-status-filter" className="form-label small fw-semibold text-muted">
-                Status
-              </label>
-              <select
-                id="ticket-status-filter"
-                className="form-select form-select-sm"
-                value={selectedStatus}
-                onChange={(e) => {
-                  setSelectedStatus(e.target.value as TicketStatusType | "");
-                  setPage(1);
-                }}
-              >
-                <option value="">All Statuses</option>
-                <option value="NEW">New</option>
-                <option value="OPEN">Open</option>
-                <option value="IN_PROGRESS">In Progress</option>
-                <option value="RESOLVED">Resolved</option>
-                <option value="CLOSED">Closed</option>
-              </select>
-            </div>
+          {/* Status */}
+          <div className="col-6 col-sm-3 col-lg-2">
+            <label htmlFor="ticket-status-filter" className="form-label small fw-semibold text-muted">
+              Status
+            </label>
+            <select
+              id="ticket-status-filter"
+              className="form-select form-control-zen"
+              value={selectedStatus}
+              onChange={(e) => {
+                setSelectedStatus(e.target.value as TicketStatusType | "");
+                setPage(1);
+              }}
+            >
+              <option value="">All Statuses</option>
+              <option value="NEW">New</option>
+              <option value="OPEN">Open</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="RESOLVED">Resolved</option>
+              <option value="CLOSED">Closed</option>
+            </select>
+          </div>
 
-            {/* Sort */}
-            <div className="col-6 col-md-2">
-              <label htmlFor="ticket-sort-select" className="form-label small fw-semibold text-muted">
-                Sort By
-              </label>
-              <select
-                id="ticket-sort-select"
-                className="form-select form-select-sm"
-                value={`${sortField}-${sortOrder}`}
-                onChange={(e) => {
-                  const [field, ord] = e.target.value.split("-");
-                  setSortField(field);
-                  setSortOrder(ord as "asc" | "desc");
-                  setPage(1);
-                }}
-              >
-                <option value="createdAt-desc">Newest First</option>
-                <option value="createdAt-asc">Oldest First</option>
-                <option value="ticketNumber-asc">Ticket # (Asc)</option>
-                <option value="ticketNumber-desc">Ticket # (Desc)</option>
-                <option value="requestedPriority-desc">Priority</option>
-              </select>
-            </div>
+          {/* Sort */}
+          <div className="col-6 col-sm-3 col-lg-2">
+            <label htmlFor="ticket-sort-select" className="form-label small fw-semibold text-muted">
+              Sort By
+            </label>
+            <select
+              id="ticket-sort-select"
+              className="form-select form-control-zen"
+              value={`${sortField}-${sortOrder}`}
+              onChange={(e) => {
+                const [field, ord] = e.target.value.split("-");
+                setSortField(field);
+                setSortOrder(ord as "asc" | "desc");
+                setPage(1);
+              }}
+            >
+              <option value="createdAt-desc">Newest First</option>
+              <option value="createdAt-asc">Oldest First</option>
+              <option value="ticketNumber-asc">Ticket # (Asc)</option>
+              <option value="ticketNumber-desc">Ticket # (Desc)</option>
+              <option value="requestedPriority-desc">Priority</option>
+            </select>
+          </div>
+
+          {/* Page Size */}
+          <div className="col-6 col-sm-3 col-lg-1">
+            <label htmlFor="ticket-pagesize-select" className="form-label small fw-semibold text-muted">
+              Per Page
+            </label>
+            <select
+              id="ticket-pagesize-select"
+              className="form-select form-control-zen"
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
+          </div>
+
+          {/* Clear Filters in Toolbar */}
+          <div className="col-6 col-sm-3 col-lg-1 d-flex align-items-end">
+            <button
+              type="button"
+              className="btn-zen-secondary w-100 clear-filters-btn"
+              onClick={handleClearFilters}
+              disabled={!hasActiveFilters}
+              title="Reset all search and filter parameters"
+              style={{ padding: "0.375rem 0.5rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}
+            >
+              Clear
+            </button>
           </div>
         </div>
       </div>
 
       {/* Main Content Area */}
       {loading && !ticketsData && (
-        <div className="text-center py-5">
-          <div className="spinner-border text-primary" role="status">
+        <div className="text-center py-5" role="status">
+          <div className="spinner-border text-success" role="status">
             <span className="visually-hidden">Loading tickets…</span>
           </div>
-          <p className="text-muted mt-2">Loading your tickets…</p>
+          <p className="text-muted mt-2 small">Loading your tickets…</p>
         </div>
       )}
 
@@ -301,58 +334,54 @@ export default function MyTickets() {
 
       {/* Empty State (AC-07 / BR-12) */}
       {isTrulyEmpty && !loading && (
-        <div className="card shadow-sm border text-center py-5 empty-state">
-          <div className="card-body">
-            <div className="mb-3 text-muted" style={{ fontSize: "2.5rem" }}>
-              📋
-            </div>
-            <h5 className="fw-bold mb-2">No tickets yet</h5>
-            <p className="text-muted mb-4" style={{ maxWidth: "420px", margin: "0 auto" }}>
-              You haven't submitted any support tickets yet. Need help with hardware, software, or access?
-            </p>
-            <button
-              type="button"
-              className="btn btn-primary create-ticket-cta"
-              onClick={() => navigate("/tickets/new")}
-            >
-              Create Your First Ticket
-            </button>
+        <div className="zen-card text-center py-5 empty-state">
+          <div className="mb-3 text-muted" style={{ fontSize: "2.5rem" }}>
+            📋
           </div>
+          <h2 className="h5 mb-2">No tickets yet</h2>
+          <p className="text-muted mb-4 small" style={{ maxWidth: "420px", margin: "0 auto" }}>
+            You haven't submitted any support tickets yet. Need help with hardware, software, or access?
+          </p>
+          <button
+            type="button"
+            className="btn-zen-primary create-ticket-cta"
+            onClick={() => navigate("/tickets/new")}
+          >
+            Create Your First Ticket
+          </button>
         </div>
       )}
 
       {/* No Results State (AC-08 / BR-12) */}
       {isNoResults && !loading && (
-        <div className="card shadow-sm border text-center py-5 no-results-state">
-          <div className="card-body">
-            <div className="mb-3 text-muted" style={{ fontSize: "2.5rem" }}>
-              🔍
-            </div>
-            <h5 className="fw-bold mb-2">No tickets found</h5>
-            <p className="text-muted mb-4">
-              No tickets matched your active search or filters. Try adjusting or clearing them.
-            </p>
-            <button
-              type="button"
-              className="btn btn-outline-secondary clear-filters-cta"
-              onClick={handleClearFilters}
-            >
-              Clear Filters
-            </button>
+        <div className="zen-card text-center py-5 no-results-state">
+          <div className="mb-3 text-muted" style={{ fontSize: "2.5rem" }}>
+            🔍
           </div>
+          <h2 className="h5 mb-2">No tickets found</h2>
+          <p className="text-muted mb-4 small">
+            No tickets matched your active search or filters. Try adjusting or clearing them.
+          </p>
+          <button
+            type="button"
+            className="btn-zen-secondary clear-filters-cta"
+            onClick={handleClearFilters}
+          >
+            Clear Filters
+          </button>
         </div>
       )}
 
-      {/* Ticket List Display */}
+      {/* Ticket List Display (Desktop: Table ≥992px, Mobile/Tablet: Cards <992px) */}
       {ticketsData && ticketsData.data.length > 0 && (
-        <div className="card shadow-sm border">
-          {/* Desktop & Tablet Table */}
-          <div className="d-none d-md-block">
+        <div className="zen-card p-0 overflow-hidden">
+          {/* Desktop Table (≥992px per ui-spec.md §8) */}
+          <div className="d-none d-lg-block">
             <TicketTable tickets={ticketsData.data} />
           </div>
 
-          {/* Mobile Card List */}
-          <div className="d-md-none p-3">
+          {/* Tablet/Mobile Stacked Cards (<992px per ui-spec.md §8) */}
+          <div className="d-lg-none p-3">
             <TicketCard tickets={ticketsData.data} />
           </div>
 
