@@ -24,6 +24,7 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
 }) => {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   // Soft-remove modal state
   const [removingAttachment, setRemovingAttachment] = useState<AttachmentItem | null>(null);
@@ -142,6 +143,34 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
     }
   };
 
+  const handleDownload = async (e: React.MouseEvent<HTMLAnchorElement>, att: AttachmentItem) => {
+    e.preventDefault();
+    setDownloadError(null);
+    try {
+      const url = getAttachmentDownloadUrl(att.id, requesterId);
+      const res = await fetch(url);
+      if (res.status === 404) {
+        setDownloadError("This file is no longer available.");
+        return;
+      }
+      if (!res.ok) {
+        setDownloadError("Failed to download file. Please try again.");
+        return;
+      }
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = att.originalName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch {
+      setDownloadError("Unable to download file. Check your connection.");
+    }
+  };
+
   return (
     <div className="attachment-section zen-card mb-4 p-4">
       <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
@@ -154,6 +183,20 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
         {uploadError && (
           <div className="alert alert-danger py-2 px-3 small mb-3" role="alert">
             ⚠️ {uploadError}
+          </div>
+        )}
+
+        {downloadError && (
+          <div className="alert alert-danger py-2 px-3 mb-3 small d-flex justify-content-between align-items-center download-error-alert" role="alert">
+            <span>⚠️ {downloadError}</span>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-danger p-0 px-2"
+              onClick={() => setDownloadError(null)}
+              aria-label="Dismiss download error"
+            >
+              ×
+            </button>
           </div>
         )}
 
@@ -227,10 +270,9 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
                           href={getAttachmentDownloadUrl(att.id, requesterId)}
                           className="btn-zen-secondary btn-sm"
                           download={att.originalName}
+                          onClick={(e) => handleDownload(e, att)}
                           aria-label={`Download ${att.originalName}`}
                           title={`Download ${att.originalName}`}
-                          target="_blank"
-                          rel="noreferrer"
                         >
                           Download
                         </a>

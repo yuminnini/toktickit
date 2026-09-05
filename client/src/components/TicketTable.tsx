@@ -4,20 +4,59 @@ import Badge from "./Badge";
 
 interface TicketTableProps {
   tickets: TicketListItem[];
+  sortField?: string;
+  sortOrder?: "asc" | "desc";
+  onSort?: (field: string) => void;
 }
 
-export default function TicketTable({ tickets }: TicketTableProps) {
+export default function TicketTable({
+  tickets,
+  sortField,
+  sortOrder,
+  onSort,
+}: TicketTableProps) {
+  const renderSortHeader = (label: string, field?: string, width?: string) => {
+    if (!field || !onSort) {
+      return (
+        <th scope="col" style={{ width, color: "var(--color-text)", fontWeight: 600 }}>
+          {label}
+        </th>
+      );
+    }
+    const isCurrent = sortField === field;
+    return (
+      <th scope="col" style={{ width, color: "var(--color-text)", fontWeight: 600 }}>
+        <button
+          type="button"
+          className="btn btn-link p-0 text-decoration-none d-inline-flex align-items-center gap-1 text-reset sort-header-btn"
+          style={{ fontWeight: 600, fontSize: "inherit" }}
+          onClick={() => onSort(field)}
+          aria-label={`Sort by ${label}`}
+        >
+          <span>{label}</span>
+          <span
+            className={isCurrent ? "fw-bold" : "text-muted"}
+            style={{ fontSize: "11px", color: isCurrent ? "var(--color-primary)" : undefined }}
+          >
+            {isCurrent ? (sortOrder === "asc" ? "▲" : "▼") : "↕"}
+          </span>
+        </button>
+      </th>
+    );
+  };
+
   return (
     <div className="table-responsive ticket-table-container">
       <table className="table table-hover align-middle mb-0">
         <thead style={{ backgroundColor: "var(--color-bg)", borderBottom: "2px solid var(--color-surface-border)" }}>
           <tr>
-            <th scope="col" style={{ width: "160px", color: "var(--color-text)", fontWeight: 600 }}>Ticket #</th>
-            <th scope="col" style={{ color: "var(--color-text)", fontWeight: 600 }}>Summary</th>
-            <th scope="col" style={{ width: "160px", color: "var(--color-text)", fontWeight: 600 }}>Category</th>
-            <th scope="col" style={{ width: "110px", color: "var(--color-text)", fontWeight: 600 }}>Priority</th>
-            <th scope="col" style={{ width: "120px", color: "var(--color-text)", fontWeight: 600 }}>Status</th>
-            <th scope="col" style={{ width: "140px", color: "var(--color-text)", fontWeight: 600 }}>Created</th>
+            {renderSortHeader("Ticket #", "ticketNumber", "150px")}
+            {renderSortHeader("Summary", "summary")}
+            {renderSortHeader("Category", undefined, "140px")}
+            {renderSortHeader("Priority", "requestedPriority", "110px")}
+            {renderSortHeader("Status", "currentStatus", "120px")}
+            {renderSortHeader("Created", "createdAt", "130px")}
+            {renderSortHeader("Last Updated", "updatedAt", "130px")}
           </tr>
         </thead>
         <tbody>
@@ -36,7 +75,7 @@ export default function TicketTable({ tickets }: TicketTableProps) {
                 <Link
                   to={`/tickets/${ticket.id}`}
                   className="text-dark text-decoration-none d-block text-truncate ticket-summary-link"
-                  style={{ maxWidth: "340px" }}
+                  style={{ maxWidth: "300px" }}
                   title={ticket.summary}
                 >
                   {ticket.summary}
@@ -53,6 +92,13 @@ export default function TicketTable({ tickets }: TicketTableProps) {
               </td>
               <td className="text-muted small">
                 {new Date(ticket.createdAt).toLocaleDateString("en-US", {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </td>
+              <td className="text-muted small">
+                {new Date(ticket.updatedAt).toLocaleDateString("en-US", {
                   year: "numeric",
                   month: "short",
                   day: "numeric",

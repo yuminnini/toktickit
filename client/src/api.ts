@@ -122,6 +122,7 @@ export interface TicketListItem {
   requestedPriority: PriorityType;
   currentStatus: TicketStatusType;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface TicketListResponse {

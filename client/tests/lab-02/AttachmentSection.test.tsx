@@ -307,5 +307,31 @@ describe("Attachment Components and UI-08 / AC-12", () => {
         expect(document.activeElement).toBe(removeBtn);
       });
     });
+
+    it("displays 'This file is no longer available.' when downloading a 404 attachment", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          status: 404,
+          ok: false,
+        })
+      );
+
+      render(
+        <AttachmentSection
+          ticketId={10}
+          requesterId={1}
+          attachments={mockAttachments}
+          onAttachmentChanged={vi.fn()}
+        />
+      );
+
+      const downloadLink = screen.getByRole("link", { name: /download diagnostic.png/i });
+      fireEvent.click(downloadLink);
+
+      await waitFor(() => {
+        expect(screen.getByText(/this file is no longer available/i)).toBeInTheDocument();
+      });
+    });
   });
 });
