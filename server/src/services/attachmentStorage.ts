@@ -32,6 +32,108 @@ export function isValidFileType(originalName: string, mimeType: string): boolean
   return allowedMimes ? allowedMimes.includes(mimeType.toLowerCase()) : false;
 }
 
+/**
+ * Inspect magic numbers from file buffer to determine actual file type
+ */
+export function detectMimeFromBuffer(buffer: Buffer): string | null {
+  if (!buffer || buffer.length < 3) {
+    return null;
+  }
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return "image/jpeg";
+  }
+
+  // PDF: %PDF- (25 50 44 46 2D)
+  if (
+    buffer.length >= 5 &&
+    buffer[0] === 0x25 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x44 &&
+    buffer[3] === 0x46 &&
+    buffer[4] === 0x2d
+  ) {
+    return "application/pdf";
+  }
+
+  // WEBP: RIFF (bytes 0-3) + WEBP (bytes 8-11)
+  if (
+    buffer.length >= 12 &&
+    buffer[0] === 0x52 && // R
+    buffer[1] === 0x49 && // I
+    buffer[2] === 0x46 && // F
+    buffer[3] === 0x46 && // F
+    buffer[8] === 0x57 && // W
+    buffer[9] === 0x45 && // E
+    buffer[10] === 0x42 && // B
+    buffer[11] === 0x50 // P
+  ) {
+    return "image/webp";
+  }
+
+  return null;
+}
+
+/**
+ * Validate that the stored file actually matches its expected extension and MIME type
+ * by reading its magic bytes directly from disk.
+ */
+export async function validateFileContent(
+  filePath: string,
+  originalName: string,
+  claimedMime: string
+): Promise<boolean> {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return false;
+    }
+
+    const handle = await fs.promises.open(filePath, "r");
+    const buffer = Buffer.alloc(32);
+    const { bytesRead } = await handle.read(buffer, 0, 32, 0);
+    await handle.close();
+
+    if (bytesRead < 3) {
+      return false;
+    }
+
+    const detectedMime = detectMimeFromBuffer(buffer.subarray(0, bytesRead));
+    if (!detectedMime) {
+      return false;
+    }
+
+    const ext = path.extname(originalName).toLowerCase();
+    const allowedMimes = ALLOWED_MIME_MAP[ext];
+    if (!allowedMimes || !allowedMimes.includes(detectedMime)) {
+      return false;
+    }
+
+    if (claimedMime && claimedMime.toLowerCase() !== detectedMime) {
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function resolveSafeFilePath(storedFilename: string): string | null {
   if (!storedFilename || typeof storedFilename !== "string") {
     return null;

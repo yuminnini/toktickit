@@ -266,5 +266,46 @@ describe("Attachment Components and UI-08 / AC-12", () => {
       ).toBeInTheDocument();
       expect(screen.queryByLabelText(/select file to upload/i)).not.toBeInTheDocument();
     });
+
+    it("manages keyboard focus into modal on open, closes on Escape, and restores focus", async () => {
+      render(
+        <AttachmentSection
+          ticketId={10}
+          requesterId={1}
+          attachments={mockAttachments}
+          onAttachmentChanged={vi.fn()}
+        />
+      );
+
+      const removeBtn = screen.getByRole("button", { name: /remove diagnostic.png/i });
+      removeBtn.focus();
+      expect(document.activeElement).toBe(removeBtn);
+
+      // Open modal
+      fireEvent.click(removeBtn);
+
+      const modalTitle = screen.getByText(/remove attachment/i, { selector: "h5" });
+      expect(modalTitle).toBeInTheDocument();
+
+      const reasonInput = screen.getByLabelText(/reason for removal/i);
+
+      // Verify focus moved into modal textarea
+      await waitFor(() => {
+        expect(document.activeElement).toBe(reasonInput);
+      });
+
+      // Press Escape key
+      fireEvent.keyDown(window, { key: "Escape", code: "Escape" });
+
+      // Modal should be closed
+      await waitFor(() => {
+        expect(screen.queryByText(/remove attachment/i, { selector: "h5" })).not.toBeInTheDocument();
+      });
+
+      // Focus should be returned to the remove button
+      await waitFor(() => {
+        expect(document.activeElement).toBe(removeBtn);
+      });
+    });
   });
 });

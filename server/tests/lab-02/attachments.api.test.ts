@@ -18,6 +18,28 @@ const testUploadDir = fs.mkdtempSync(
 );
 process.env.UPLOAD_DIR = testUploadDir;
 
+// Magic bytes for test buffers (Peer review: content-based inspection)
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const PDF_MAGIC = Buffer.from("%PDF-1.4\n");
+const JPEG_MAGIC = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+const WEBP_MAGIC = Buffer.from([
+  0x52, 0x49, 0x46, 0x46,
+  0x24, 0x00, 0x00, 0x00,
+  0x57, 0x45, 0x42, 0x50,
+]);
+
+function createTestPng(content = "dummy png data"): Buffer {
+  return Buffer.concat([PNG_MAGIC, Buffer.from(content)]);
+}
+
+function createTestPdf(content = "dummy pdf data"): Buffer {
+  return Buffer.concat([PDF_MAGIC, Buffer.from(content)]);
+}
+
+function createTestJpeg(content = "dummy jpeg data"): Buffer {
+  return Buffer.concat([JPEG_MAGIC, Buffer.from(content)]);
+}
+
 describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10, API-12, API-13, API-14, AC-11..15)", () => {
   let requesterAId: number;
   let requesterBId: number;
@@ -140,7 +162,10 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
   describe("Upload Validation & Pre-validation (Peer review #5)", () => {
     it("API-07 / AC-11: uploads a valid 1 MB PNG and returns 201 with attachment metadata", async () => {
       const ticket = await createTicket(requesterAId);
-      const oneMbBuffer = Buffer.alloc(1024 * 1024, 0x89);
+      const oneMbBuffer = Buffer.concat([
+        PNG_MAGIC,
+        Buffer.alloc(1024 * 1024 - PNG_MAGIC.length, 0x89),
+      ]);
 
       const res = await request(app)
         .post(`/api/tickets/${ticket.id}/attachments`)
@@ -171,7 +196,10 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
     it("accepts file boundary at exactly 5 MB (5 * 1024 * 1024 bytes)", async () => {
       const ticket = await createTicket(requesterAId);
-      const exact5MbBuffer = Buffer.alloc(MAX_FILE_SIZE, 0x50);
+      const exact5MbBuffer = Buffer.concat([
+        PDF_MAGIC,
+        Buffer.alloc(MAX_FILE_SIZE - PDF_MAGIC.length, 0x50),
+      ]);
 
       const res = await request(app)
         .post(`/api/tickets/${ticket.id}/attachments`)
@@ -231,6 +259,55 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       expect(res.status).toBe(400);
       expect(res.body.error).toBe("UNSUPPORTED_TYPE");
+    });
+
+    it("rejects spoofed file with valid extension (.png) and valid MIME but invalid content (magic numbers)", async () => {
+      const ticket = await createTicket(requesterAId);
+      const fakePngBuffer = Buffer.from("plain text claiming to be a PNG");
+      const filesBefore = fs.readdirSync(testUploadDir).length;
+
+      const res = await request(app)
+        .post(`/api/tickets/${ticket.id}/attachments`)
+        .query({ requesterId: requesterAId })
+        .attach("file", fakePngBuffer, {
+          filename: "spoofed.png",
+          contentType: "image/png",
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("UNSUPPORTED_TYPE");
+      // Verify no orphan file remains on disk
+      expect(fs.readdirSync(testUploadDir).length).toBe(filesBefore);
+    });
+
+    it("accepts valid WEBP file with RIFF WEBP magic numbers", async () => {
+      const ticket = await createTicket(requesterAId);
+      const webpBuffer = Buffer.concat([WEBP_MAGIC, Buffer.from("test webp payload")]);
+
+      const res = await request(app)
+        .post(`/api/tickets/${ticket.id}/attachments`)
+        .query({ requesterId: requesterAId })
+        .attach("file", webpBuffer, {
+          filename: "photo.webp",
+          contentType: "image/webp",
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.mimeType).toBe("image/webp");
+    });
+
+    it("supports X-Requester-Id header on upload", async () => {
+      const ticket = await createTicket(requesterAId);
+      const res = await request(app)
+        .post(`/api/tickets/${ticket.id}/attachments`)
+        .set("X-Requester-Id", String(requesterAId))
+        .attach("file", createTestPng(), {
+          filename: "header-upload.png",
+          contentType: "image/png",
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.originalName).toBe("header-upload.png");
     });
 
     it("returns 400 NO_FILE when no file is attached", async () => {
@@ -293,7 +370,7 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
       const res6 = await request(app)
         .post(`/api/tickets/${ticket.id}/attachments`)
         .query({ requesterId: requesterAId })
-        .attach("file", Buffer.from("sixth"), {
+        .attach("file", createTestPng("sixth"), {
           filename: "file6.png",
           contentType: "image/png",
         });
@@ -315,14 +392,14 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
         request(app)
           .post(`/api/tickets/${ticket.id}/attachments`)
           .query({ requesterId: requesterAId })
-          .attach("file", Buffer.from("concurrent 1"), {
+          .attach("file", createTestPng("concurrent 1"), {
             filename: "concurrent1.png",
             contentType: "image/png",
           }),
         request(app)
           .post(`/api/tickets/${ticket.id}/attachments`)
           .query({ requesterId: requesterAId })
-          .attach("file", Buffer.from("concurrent 2"), {
+          .attach("file", createTestPng("concurrent 2"), {
             filename: "concurrent2.png",
             contentType: "image/png",
           }),
@@ -358,7 +435,7 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
       const res = await request(app)
         .post(`/api/tickets/${ticket.id}/attachments`)
         .query({ requesterId: requesterAId })
-        .attach("file", Buffer.from("replacement"), {
+        .attach("file", createTestPng("replacement"), {
           filename: "replacement.png",
           contentType: "image/png",
         });
@@ -595,7 +672,7 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
         const res = await request(app)
           .post(`/api/tickets/${ticket.id}/attachments`)
           .query({ requesterId: requesterAId })
-          .attach("file", Buffer.from("compensation test content"), {
+          .attach("file", createTestPng("compensation test content"), {
             filename: "compensate.png",
             contentType: "image/png",
           });

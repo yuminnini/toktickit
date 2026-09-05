@@ -11,9 +11,31 @@ import {
   deleteFileFromStorage,
   getUploadDir,
   resolveSafeFilePath,
+  validateFileContent,
 } from "./services/attachmentStorage.js";
 
 export const app = express();
+
+/**
+ * Extract requesterId from header (X-Requester-Id), query, or body
+ * Supports peer review contract compatibility
+ */
+export function extractRequesterId(req: Request): string | undefined {
+  const headerVal = req.headers["x-requester-id"];
+  if (typeof headerVal === "string" && headerVal.trim().length > 0) {
+    return headerVal.trim();
+  }
+  if (Array.isArray(headerVal) && headerVal[0]) {
+    return headerVal[0].trim();
+  }
+  if (typeof req.query.requesterId === "string" && req.query.requesterId.trim().length > 0) {
+    return req.query.requesterId.trim();
+  }
+  if (req.body && typeof req.body.requesterId !== "undefined") {
+    return String(req.body.requesterId).trim();
+  }
+  return undefined;
+}
 
 app.use(cors());
 app.use(express.json());
@@ -67,11 +89,13 @@ app.get("/api/requesters", async (_req: Request, res: Response) => {
 // List Tickets (My Tickets)
 app.get("/api/tickets", async (req: Request, res: Response) => {
   try {
+    const requesterId = extractRequesterId(req);
     const {
-      requesterId,
       search,
       categoryId,
       requestedPriority,
+      priority,
+      itPriority,
       status,
       sort,
       order,
@@ -129,12 +153,13 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       }
     }
 
-    // Priority filter
+    // Priority filter (supports requestedPriority, priority, and itPriority)
+    const rawPriority = requestedPriority || priority || itPriority;
     if (
-      typeof requestedPriority === "string" &&
-      Object.values(Priority).includes(requestedPriority as Priority)
+      typeof rawPriority === "string" &&
+      Object.values(Priority).includes(rawPriority as Priority)
     ) {
-      where.requestedPriority = requestedPriority as Priority;
+      where.requestedPriority = rawPriority as Priority;
     }
 
     // Status filter
@@ -200,6 +225,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
     const data = tickets.map((t) => ({
       id: t.id,
       ticketNumber: t.ticketNumber,
+      ticketNo: t.ticketNumber,
       summary: t.summary,
       category: t.category.name,
       requestedPriority: t.requestedPriority,
@@ -224,7 +250,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
 app.get("/api/tickets/:id", async (req: Request, res: Response) => {
   try {
     const ticketId = Number(req.params.id);
-    const { requesterId } = req.query;
+    const requesterId = extractRequesterId(req);
 
     if (!Number.isInteger(ticketId)) {
       res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
@@ -283,7 +309,10 @@ app.get("/api/tickets/:id", async (req: Request, res: Response) => {
       return;
     }
 
-    res.status(200).json(ticket);
+    res.status(200).json({
+      ...ticket,
+      ticketNo: ticket.ticketNumber,
+    });
   } catch {
     res.status(500).json({ error: "INTERNAL_ERROR", message: "Unable to load ticket detail" });
   }
@@ -292,8 +321,8 @@ app.get("/api/tickets/:id", async (req: Request, res: Response) => {
 // Create Ticket
 app.post("/api/tickets", async (req: Request, res: Response) => {
   try {
+    const requesterId = extractRequesterId(req);
     const {
-      requesterId,
       categoryId,
       relatedSystemId,
       summary,
@@ -398,7 +427,10 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
       });
     });
 
-    res.status(201).json(ticket);
+    res.status(201).json({
+      ...ticket,
+      ticketNo: ticket.ticketNumber,
+    });
   } catch {
     res.status(500).json({ error: "INTERNAL_ERROR", message: "Unable to create ticket" });
   }
@@ -408,7 +440,7 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
 const validateTicketForUpload = async (req: Request, res: Response, next: express.NextFunction) => {
   try {
     const ticketId = Number(req.params.id);
-    const { requesterId } = req.query;
+    const requesterId = extractRequesterId(req);
 
     if (!Number.isInteger(ticketId)) {
       res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
@@ -508,6 +540,22 @@ app.post("/api/tickets/:id/attachments", validateTicketForUpload, (req: Request,
 
     const filenameToDelete = req.file.filename;
 
+    // Validate file content magic bytes directly from disk (Peer Review: content-based verification)
+    const isContentValid = await validateFileContent(
+      req.file.path,
+      req.file.originalname,
+      req.file.mimetype
+    );
+
+    if (!isContentValid) {
+      await deleteFileFromStorage(filenameToDelete);
+      res.status(400).json({
+        error: "UNSUPPORTED_TYPE",
+        message: "Allowed types: JPG, JPEG, PNG, WEBP, PDF",
+      });
+      return;
+    }
+
     try {
       const ticketId = Number(req.params.id);
       const prisma = getPrisma();
@@ -569,7 +617,7 @@ app.post("/api/tickets/:id/attachments", validateTicketForUpload, (req: Request,
 app.get("/api/attachments/:id", async (req: Request, res: Response) => {
   try {
     const attachmentId = Number(req.params.id);
-    const { requesterId } = req.query;
+    const requesterId = extractRequesterId(req);
 
     if (!Number.isInteger(attachmentId)) {
       res.status(404).json({ error: "NOT_FOUND", message: "Attachment not found" });
@@ -636,7 +684,7 @@ app.get("/api/attachments/:id", async (req: Request, res: Response) => {
 app.get("/api/attachments/:id/download", async (req: Request, res: Response) => {
   try {
     const attachmentId = Number(req.params.id);
-    const { requesterId } = req.query;
+    const requesterId = extractRequesterId(req);
 
     if (!Number.isInteger(attachmentId)) {
       res.status(404).json({ error: "NOT_FOUND", message: "Attachment not found" });
@@ -730,7 +778,7 @@ app.get("/api/attachments/:id/download", async (req: Request, res: Response) => 
 app.delete("/api/attachments/:id", async (req: Request, res: Response) => {
   try {
     const attachmentId = Number(req.params.id);
-    const { requesterId } = req.query;
+    const requesterId = extractRequesterId(req);
     const { reason } = req.body || {};
 
     if (!Number.isInteger(attachmentId)) {

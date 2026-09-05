@@ -30,7 +30,7 @@ export default function MyTickets() {
   const [sortField, setSortField] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(10);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -270,6 +270,41 @@ export default function MyTickets() {
               <option value="ticketNumber-desc">Ticket # (Desc)</option>
               <option value="requestedPriority-desc">Priority</option>
             </select>
+          </div>
+
+          {/* Page Size */}
+          <div className="col-6 col-sm-3 col-lg-1">
+            <label htmlFor="ticket-pagesize-select" className="form-label small fw-semibold text-muted">
+              Per Page
+            </label>
+            <select
+              id="ticket-pagesize-select"
+              className="form-select form-control-zen"
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
+          </div>
+
+          {/* Clear Filters in Toolbar */}
+          <div className="col-6 col-sm-3 col-lg-1 d-flex align-items-end">
+            <button
+              type="button"
+              className="btn-zen-secondary w-100 clear-filters-btn"
+              onClick={handleClearFilters}
+              disabled={!hasActiveFilters}
+              title="Reset all search and filter parameters"
+              style={{ padding: "0.375rem 0.5rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}
+            >
+              Clear
+            </button>
           </div>
         </div>
       </div>

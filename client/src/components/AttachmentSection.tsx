@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   AttachmentItem,
   uploadAttachment,
@@ -32,6 +32,33 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
   const [isSubmittingRemoval, setIsSubmittingRemoval] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastActiveElementRef = useRef<HTMLElement | null>(null);
+  const reasonInputRef = useRef<HTMLTextAreaElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  // Focus textarea when modal opens, and listen for Escape key
+  useEffect(() => {
+    if (!removingAttachment) return;
+
+    // Move focus into the modal textarea
+    const timer = setTimeout(() => {
+      reasonInputRef.current?.focus();
+    }, 50);
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (!isSubmittingRemoval) {
+          handleCloseRemoveModal();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [removingAttachment, isSubmittingRemoval]);
 
   const activeAttachments = attachments.filter((a) => !a.removedAt);
   const canUploadMore = activeAttachments.length < 5;
@@ -68,6 +95,7 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
   };
 
   const handleOpenRemoveModal = (att: AttachmentItem) => {
+    lastActiveElementRef.current = document.activeElement as HTMLElement;
     setRemovingAttachment(att);
     setRemovalReason("");
     setRemovalError(null);
@@ -78,6 +106,10 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
     setRemovingAttachment(null);
     setRemovalReason("");
     setRemovalError(null);
+    // Restore focus to the button that triggered the modal
+    setTimeout(() => {
+      lastActiveElementRef.current?.focus();
+    }, 0);
   };
 
   const handleSubmitRemoval = async (e: React.FormEvent) => {
@@ -100,6 +132,9 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
       await removeAttachment(removingAttachment.id, requesterId, trimmed);
       setRemovingAttachment(null);
       onAttachmentChanged();
+      setTimeout(() => {
+        lastActiveElementRef.current?.focus();
+      }, 0);
     } catch (err: any) {
       setRemovalError(err.message || "Failed to remove attachment");
     } finally {
@@ -265,16 +300,18 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
       {/* Soft-remove modal */}
       {removingAttachment && (
         <div
+          ref={modalRef}
           className="modal fade show d-block"
           tabIndex={-1}
           role="dialog"
           style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
           aria-modal="true"
+          aria-labelledby="remove-attachment-title"
         >
           <div className="modal-dialog modal-dialog-centered" role="document">
             <div className="modal-content zen-card p-0">
               <div className="modal-header border-bottom px-4 py-3">
-                <h5 className="modal-title fs-6 fw-bold">Remove Attachment</h5>
+                <h5 id="remove-attachment-title" className="modal-title fs-6 fw-bold">Remove Attachment</h5>
                 <button
                   type="button"
                   className="btn-close"
@@ -302,6 +339,7 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
                       Reason for removal <span className="required-marker">*</span>
                     </label>
                     <textarea
+                      ref={reasonInputRef}
                       id="removal-reason-input"
                       className="form-control form-control-zen"
                       rows={3}

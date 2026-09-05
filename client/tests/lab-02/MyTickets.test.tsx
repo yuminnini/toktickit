@@ -333,4 +333,105 @@ describe("MyTickets Component (UI-05, UI-06, UI-07, UI-11)", () => {
       expect(screen.getAllByText("TKT-2026-000011")[0]).toBeInTheDocument();
     });
   });
+
+  it("resets filters when clicking the toolbar Clear Filters button", async () => {
+    const fetchSpy = vi.spyOn(api, "fetchTickets").mockResolvedValue({
+      data: [
+        {
+          id: 1,
+          ticketNumber: "TKT-2026-000001",
+          summary: "First Ticket",
+          category: "Hardware",
+          requestedPriority: "LOW",
+          currentStatus: "NEW",
+          createdAt: "2026-09-01T10:00:00Z",
+        },
+      ],
+      page: 1,
+      pageSize: 10,
+      total: 1,
+      totalPages: 1,
+      unfilteredTotal: 10,
+    });
+
+    render(
+      <MemoryRouter>
+        <RequesterContext.Provider
+          value={{
+            requester: { id: 1, name: "Alice" },
+            setRequester: vi.fn(),
+            clearRequester: vi.fn(),
+          }}
+        >
+          <MyTickets />
+        </RequesterContext.Provider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("TKT-2026-000001")[0]).toBeInTheDocument();
+    });
+
+    // Enter search query to activate filter
+    const searchInput = screen.getByLabelText(/search/i);
+    fireEvent.change(searchInput, { target: { value: "test query" } });
+
+    // The toolbar Clear button should be enabled
+    const clearBtn = screen.getByRole("button", { name: /^clear$/i });
+    expect(clearBtn).toBeEnabled();
+
+    fireEvent.click(clearBtn);
+
+    // Search input should be cleared
+    expect(searchInput).toHaveValue("");
+  });
+
+  it("updates page size and fetches page 1 when changing Per Page selector", async () => {
+    const fetchSpy = vi.spyOn(api, "fetchTickets").mockResolvedValue({
+      data: [
+        {
+          id: 1,
+          ticketNumber: "TKT-2026-000001",
+          summary: "First Ticket",
+          category: "Hardware",
+          requestedPriority: "LOW",
+          currentStatus: "NEW",
+          createdAt: "2026-09-01T10:00:00Z",
+        },
+      ],
+      page: 1,
+      pageSize: 20,
+      total: 1,
+      totalPages: 1,
+      unfilteredTotal: 10,
+    });
+
+    render(
+      <MemoryRouter>
+        <RequesterContext.Provider
+          value={{
+            requester: { id: 1, name: "Alice" },
+            setRequester: vi.fn(),
+            clearRequester: vi.fn(),
+          }}
+        >
+          <MyTickets />
+        </RequesterContext.Provider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/per page/i)).toBeInTheDocument();
+    });
+
+    const pageSizeSelect = screen.getByLabelText(/per page/i);
+    fireEvent.change(pageSizeSelect, { target: { value: "20" } });
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        expect.objectContaining({ pageSize: 20, page: 1 }),
+        expect.any(AbortSignal)
+      );
+    });
+  });
 });

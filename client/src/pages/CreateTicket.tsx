@@ -27,6 +27,7 @@ export default function CreateTicket() {
   const [requestedPriority, setRequestedPriority] = useState<PriorityType>("MEDIUM");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [uploadWarning, setUploadWarning] = useState<string | null>(null);
+  const [failedAttachments, setFailedAttachments] = useState<string[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [apiError, setApiError] = useState<string | null>(null);
@@ -142,18 +143,19 @@ export default function CreateTicket() {
       });
 
       if (attachments.length > 0) {
-        let failedCount = 0;
+        const failed: string[] = [];
         for (const file of attachments) {
           try {
             await uploadAttachment(ticket.id, requester.id, file);
           } catch (attErr) {
             console.error("Failed to upload attachment:", file.name, attErr);
-            failedCount++;
+            failed.push(file.name);
           }
         }
-        if (failedCount > 0) {
+        if (failed.length > 0) {
+          setFailedAttachments(failed);
           setUploadWarning(
-            `Ticket created, but ${failedCount} attachment(s) could not be uploaded.`
+            `Ticket created, but ${failed.length} attachment(s) could not be uploaded: ${failed.join(", ")}.`
           );
         }
       }
@@ -175,6 +177,7 @@ export default function CreateTicket() {
     setDescription("");
     setAttachments([]);
     setUploadWarning(null);
+    setFailedAttachments([]);
     setErrors({});
     setApiError(null);
   }
@@ -204,8 +207,26 @@ export default function CreateTicket() {
           </div>
 
           {uploadWarning && (
-            <div className="alert alert-warning mb-4 py-2 px-3 small" role="alert">
-              ⚠️ {uploadWarning}
+            <div className="alert alert-warning mb-4 py-3 px-3 text-start small" role="alert">
+              <div className="fw-semibold mb-1">⚠️ {uploadWarning}</div>
+              {failedAttachments.length > 0 && (
+                <div className="mt-2">
+                  <div className="text-muted mb-2">
+                    Failed file(s): <strong>{failedAttachments.join(", ")}</strong>
+                  </div>
+                  <div>
+                    You can re-attach your file(s) on the Ticket Detail page:
+                  </div>
+                  <div className="mt-2">
+                    <Link
+                      to={`/tickets/${createdTicket.id}`}
+                      className="btn-zen-secondary btn-sm d-inline-flex align-items-center gap-1"
+                    >
+                      📎 Go to Ticket Detail to Attach Files
+                    </Link>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

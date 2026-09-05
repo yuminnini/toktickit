@@ -251,10 +251,48 @@
 - `cd client && npm test` -> Pass; 10 test files, 45 tests passed
 - `cd client && npm run build` -> Pass; TypeScript and Vite production build succeeded (0 errors)
 
+---
+
+## 2026-09-05 - Review Fixes: Phase 6 Peer Review Feedback & Contract Compatibility
+
+- Branch: `feature/lab2-zen-green-responsive`
+- Scope completed:
+  1. Attachment File Content Inspection (`server/src/services/attachmentStorage.ts` & `server/src/app.ts`):
+     - Implemented `detectMimeFromBuffer` and `validateFileContent` inspecting magic bytes from uploaded file content directly on disk.
+     - Supported signatures: PNG (`89 50 4E 47 0D 0A 1A 0A`), JPEG (`FF D8 FF`), PDF (`%PDF-`), and WEBP (`RIFF`...`WEBP`).
+     - Any spoofed file extension/MIME whose content does not match its signature is rejected with 400 `UNSUPPORTED_TYPE` and unlinked from disk immediately.
+  2. Create Ticket Post-Creation Failure Guidance (`client/src/pages/CreateTicket.tsx`):
+     - Stored failed attachment names array `failedAttachments: string[]`.
+     - Displayed specific failed filenames in success card warning.
+     - Provided direct link `<Link to={"/tickets/" + createdTicket.id}>` for user to re-attach failed files in the ticket detail screen.
+  3. My Tickets UX & Pagination (`client/src/pages/MyTickets.tsx`):
+     - Added permanent "Clear Filters" button in filter toolbar so users can clear filters anytime (even when results are present).
+     - Added Per Page selector (`pageSize`: 5, 10, 20, 50, default 10) resetting page to 1 on change.
+     - Clarified Priority filter and supported backend query aliases (`priority`, `requestedPriority`, `itPriority`).
+  4. Attachment Modal Keyboard Accessibility (`client/src/components/AttachmentSection.tsx`):
+     - Moved focus into reason textarea automatically on modal open.
+     - Added Escape key listener to close modal safely.
+     - Saved and restored focus to previous active button (`lastActiveElementRef`) when modal closes.
+  5. Dual API Contract Compatibility (`server/src/app.ts`):
+     - Added `extractRequesterId(req)` supporting `X-Requester-Id` header across all endpoints alongside query/body parameter.
+     - Exposed `ticketNo` alias alongside `ticketNumber` in ticket objects (`ticketNo: ticket.ticketNumber`).
+     - Clarified contract comparison for 404 (BR-10 non-disclosure rule) vs 410.
+  6. Test Suite Isolation & New Coverage:
+     - Fixed `server/tests/lab-02/my-tickets.api.test.ts` test isolation with dedicated test requesters.
+     - Added tests for magic byte inspection, spoofed file rejection, and header compatibility in `attachments.api.test.ts` and `my-tickets.api.test.ts`.
+     - Added tests for failed file names and ticket detail link in `CreateTicket.test.tsx`.
+     - Added tests for toolbar Clear button and page size selector in `MyTickets.test.tsx`.
+     - Added tests for modal focus management and Escape key closing in `AttachmentSection.test.tsx`.
+
+### Verification run
+- `cd server && npm test` -> Pass; 11 test files, 60 tests passed
+- `cd server && npm run build` -> Pass; TypeScript build succeeded (0 errors)
+- `cd client && npm test` -> Pass; 10 test files, 48 tests passed
+- `cd client && npm run build` -> Pass; TypeScript and Vite production build succeeded (0 errors)
+
 ### Next safe task
-- Commit and push `feature/lab2-zen-green-responsive`.
-- Open Pull Request into `lab2-staging` linking the Phase 6 Issue.
 - Proceed to **Phase 7: E2E, screenshots, visual inspection, regression (`test/lab2-e2e-evidence`)**.
+
 
 
 
