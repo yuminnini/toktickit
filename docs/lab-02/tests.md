@@ -49,10 +49,10 @@ a Business Rule.
 | RESP-UNIT | UI Style/Responsive | §8.7, §8.8 | Desktop table container vs mobile card container rendering, mobile toggler aria-expanded, filename ellipsis truncation | Multi-breakpoint markup rendered, accessible attributes verified | `client/tests/lab-02/ResponsiveLayout.test.tsx` | Pass |
 | API-19 | API | BR-08 | `POST /api/tickets` with empty `description` (after trim) | 400, `fields.description` message present | `server/tests/lab-02/create-ticket.api.test.ts` | Pass |
 | API-20 | API | BR-08 | `POST /api/tickets` with `description` at 2001 chars (boundary, over the 2000 limit) | 400 validation error | `server/tests/lab-02/create-ticket.api.test.ts` | Pass |
-| RESP-01 | Responsive | AC-18, §8.7 | Playwright screenshot of Create Ticket, My Tickets, Ticket Detail at 375px | No horizontal scroll, no clipped/overlapping elements (manual checklist §4 below) | `e2e/lab-02/responsive.spec.ts` | Planned |
-| RESP-02 | Responsive | §8.7 | Same 3 screens at 1024px (tablet) and 1280px (desktop) | Layout matches `ui-spec.md` breakpoint rules | `e2e/lab-02/responsive.spec.ts` | Planned |
-| E2E-01 | E2E | AC-01, AC-11 | Select Requester → Create Ticket with 1 attachment → see success | Ticket Number shown; ticket appears in My Tickets after navigating there | `e2e/lab-02/requester-ticket-flow.spec.ts` | Planned |
-| E2E-02 | E2E | AC-03, AC-10 | Create ticket as Requester A → switch to Requester B → open My Tickets | Requester A's ticket is not visible to Requester B | `e2e/lab-02/requester-ticket-flow.spec.ts` | Planned |
+| RESP-01 | Responsive | AC-18, §8.7 | Playwright screenshot of Create Ticket, My Tickets, Ticket Detail at 375px | No horizontal scroll, no clipped/overlapping elements (manual checklist §4 below) | `e2e/lab-02/responsive.spec.ts` | Pass |
+| RESP-02 | Responsive | §8.7 | Same 3 screens at 1024px (tablet) and 1280px (desktop) | Layout matches `ui-spec.md` breakpoint rules | `e2e/lab-02/responsive.spec.ts` | Pass |
+| E2E-01 | E2E | AC-01, AC-11 | Select Requester → Create Ticket with 1 attachment → see success | Ticket Number shown; ticket appears in My Tickets after navigating there | `e2e/lab-02/requester-ticket-flow.spec.ts` | Pass |
+| E2E-02 | E2E | AC-03, AC-10 | Create ticket as Requester A → switch to Requester B → open My Tickets | Requester A's ticket is not visible to Requester B | `e2e/lab-02/requester-ticket-flow.spec.ts` | Pass |
 
 ## 3. Acceptance-Criterion Traceability
 
@@ -82,14 +82,20 @@ a Business Rule.
 | AC-22 | STYLE-03 |
 
 ## 4. Responsive and Visual Checklist
-(Applied when reviewing RESP-01/RESP-02 screenshots, per labsheet §8.8 — filled in during Phase 7)
-- [ ] No clipped labels or buttons at any of the 3 viewport sizes
-- [ ] No overlapping text or controls
-- [ ] No unintended horizontal scrolling on mobile (<768px)
-- [ ] Priority/Status badges visually consistent across all 3 screens
-- [ ] Editable vs read-only fields visually distinguishable (Ticket Detail vs Create Ticket)
-- [ ] Filters, pagination, and attachment controls remain usable at all 3 sizes
-- [ ] Screenshots match `ui-spec.md` and the approved mockups (§8.1, §8.4, §8.5 of the labsheet), not personal memory
+(Applied when reviewing RESP-01/RESP-02 screenshots, per labsheet §8.8 — completed during Phase 7)
+- [x] No clipped labels or buttons at any of the 3 viewport sizes
+- [x] No overlapping text or controls
+- [x] No unintended horizontal scrolling on mobile (<768px)
+- [x] Priority/Status badges visually consistent across all 3 screens
+- [x] Editable vs read-only fields visually distinguishable (Ticket Detail vs Create Ticket)
+- [x] Filters, pagination, and attachment controls remain usable at all 3 sizes
+- [x] Screenshots match `ui-spec.md` and the approved mockups (§8.1, §8.4, §8.5 of the labsheet), not personal memory
+
+### Visual Evidence Artifacts
+All 9 screenshots generated per `ui-spec.md` §14 specification:
+- `artifacts/lab-02/screenshots/create-ticket/` (`mobile.png`, `tablet.png`, `desktop.png`)
+- `artifacts/lab-02/screenshots/my-tickets/` (`mobile.png`, `tablet.png`, `desktop.png`)
+- `artifacts/lab-02/screenshots/ticket-detail/` (`mobile.png`, `tablet.png`, `desktop.png`)
 ## 5. Test Commands & Reproduction Steps
 
 ### Prerequisites & Database Setup
