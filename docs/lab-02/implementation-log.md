@@ -291,7 +291,112 @@
 - `cd client && npm run build` -> Pass; TypeScript and Vite production build succeeded (0 errors)
 
 ### Next safe task
-- Proceed to **Phase 7: E2E, screenshots, visual inspection, regression (`test/lab2-e2e-evidence`)**.
+- Merged into `lab2-staging`. Proceeded to **Phase 7: E2E, screenshots, visual inspection, regression (`test/lab2-e2e-evidence`)**.
+
+---
+
+## 2026-09-05 - Issue: Phase 7 - E2E, Screenshots, Visual Inspection & Regression
+
+- Branch: `test/lab2-e2e-evidence`
+- Commit/PR: Pending PR into `lab2-staging`
+- Scope completed:
+  - Playwright Test Infrastructure:
+    - Added root `package.json` with scripts (`npm run test:e2e`, `npm run test:e2e:ui`) and `@playwright/test` dependency.
+    - Created `playwright.config.ts` configured for Chromium browser and automatic dual `webServer` orchestration (backend on port 3000, frontend on port 5173).
+    - Added valid image test fixture `e2e/fixtures/sample-attachment.png` with authentic PNG magic header (`\x89PNG\r\n\x1a\n`).
+  - E2E Tests:
+    - Created `e2e/lab-02/requester-ticket-flow.spec.ts` covering:
+      - `E2E-01`: Requester selection (Jennifer Anderson), form completion with classification and attachment, submission, success screen with ticket number pattern (`TKT-YYYY-NNNNNN`), My Tickets table navigation, Ticket Detail read-only inspection, and soft-removal modal with required reason.
+      - `E2E-02`: Requester isolation; switching from Requester A (Jennifer Anderson) to Requester B (Michael Brown) via navbar Change button, confirming Ticket A is hidden in Requester B's ticket list, and confirming direct URL access to Ticket A returns 404 / Ticket Not Found.
+  - Responsive & Visual Inspection:
+    - Created `e2e/lab-02/responsive.spec.ts` capturing all 9 required screenshots per `ui-spec.md` §14:
+      - `artifacts/lab-02/screenshots/create-ticket/` (`mobile.png`, `tablet.png`, `desktop.png`)
+      - `artifacts/lab-02/screenshots/my-tickets/` (`mobile.png`, `tablet.png`, `desktop.png`)
+      - `artifacts/lab-02/screenshots/ticket-detail/` (`mobile.png`, `tablet.png`, `desktop.png`)
+    - Completed visual inspection checklist (§4 of `docs/lab-02/tests.md`): no clipped elements, no overlapping text, no horizontal scrolling on mobile (<768px), badges consistent, read-only vs editable fields visually distinct, filters and pagination usable across all viewports.
+  - Full Regression Verification:
+    - Server test suite: 60/60 tests passing across 11 test files.
+    - Client test suite: 48/48 tests passing across 10 test files.
+    - Playwright test suite: 4/4 tests passing across 2 test files.
+    - Total tests: 112 passed, 0 failed, 0 skipped.
+- Requirements: `RESP-01`, `RESP-02`, `E2E-01`, `E2E-02`, `AC-01`, `AC-03`, `AC-10`, `AC-11`, `AC-18`, `§8.7`, `§8.8`, `ui-spec.md` §14.
+
+### Files changed
+- `package.json`, `package-lock.json`: Added Playwright test runner and root scripts.
+- `playwright.config.ts`: Playwright dual webServer test configuration.
+- `e2e/fixtures/sample-attachment.png`: Test attachment fixture with valid PNG header.
+- `e2e/lab-02/responsive.spec.ts`: Automated responsive testing and 9-screenshot capture suite.
+- `e2e/lab-02/requester-ticket-flow.spec.ts`: Complete user journey and requester isolation E2E suite.
+- `artifacts/lab-02/screenshots/**`: 9 visual evidence screenshot artifacts.
+- `docs/lab-02/tests.md`: Updated `RESP-01`, `RESP-02`, `E2E-01`, `E2E-02` to Pass and marked visual checklist items complete.
+- `docs/lab-02/implementation-log.md`: Appended Phase 7 completion entry.
+
+### Verification run
+- `npx playwright test` -> Pass; 2 test files, 4 tests passed (20.8s)
+- `cd server && npm test` -> Pass; 11 test files, 60 tests passed (9.59s)
+- `cd server && npm run build` -> Pass; TypeScript build succeeded (0 errors)
+- `cd client && npm test` -> Pass; 10 test files, 48 tests passed (15.31s)
+- `cd client && npm run build` -> Pass; TypeScript and Vite production build succeeded (0 errors)
+
+### Next safe task
+- Open Pull Request from `test/lab2-e2e-evidence` into `lab2-staging`.
+- Provide Lab 2 handoff summary and review materials to the team.
+
+---
+
+## 2026-09-05 - Peer Review Fixes (Items 1-7): UX, Table, and Error Handling
+
+- Branch: `test/lab2-e2e-evidence`
+- Scope completed:
+  1. **Numbered Pagination (`Pagination.tsx` & `theme.css`):**
+     - Rendered dynamic Showing summary (`Showing 1 to X of Y tickets`) always when `total > 0`.
+     - Replaced text with numbered page buttons `[ 1 ] [ 2 ] ...` calling `onPageChange(p)`, active page filled with Zen Green (`--color-primary`, `#006B3C`) and `aria-current="page"`.
+     - Added `◄ Previous` and `Next ►` outline buttons with proper disabled states.
+  2. **Last Updated Column in TicketTable (`TicketTable.tsx`, `client/src/api.ts`, `server/src/app.ts`):**
+     - Returned `updatedAt: t.updatedAt.toISOString()` from `GET /api/tickets`.
+     - Added `updatedAt: string` to `TicketListItem` interface.
+     - Rendered `Last Updated` column in `TicketTable` with date formatting (`Sep 5, 2026`).
+  3. **Current Status Sorting & Sortable Column Headers (`TicketTable.tsx`, `MyTickets.tsx`, `server/src/app.ts`):**
+     - Added `currentStatus` and `updatedAt` to `validSorts` in backend.
+     - Added `Status (A-Z)`, `Status (Z-A)`, `Recently Updated`, and `Oldest Updated` to Sort By dropdown.
+     - Added clickable column headers (`Ticket #`, `Summary`, `Priority`, `Status`, `Created`, `Last Updated`) toggling sort direction with carets (`▲` / `▼` / `↕`).
+  4. **Strict Empty vs No Results Separation per BR-12 (`MyTickets.tsx`):**
+     - Empty state strictly conditioned on `unfilteredTotal === 0` (user has never submitted tickets) even if a filter was entered.
+     - No results state strictly conditioned on `unfilteredTotal > 0 && total === 0` (tickets exist, but filters matched none).
+  5. **Category Load Failure Alert & Retry (`MyTickets.tsx`):**
+     - Tracked `categoryError` and rendered inline alert with `Retry` button on `fetchCategories` failure.
+  6. **Error Replaces Table and Pagination (`MyTickets.tsx`):**
+     - When ticket loading fails, hid previous table, card list, and pagination footer completely.
+     - Rendered centered error card with `Unable to load your tickets` and `Retry` button replacing the table area.
+  7. **In-App Handling for Download Failures (`AttachmentSection.tsx`):**
+     - Intercepted download click with `fetch()`. If 404, rendered in-app alert `⚠️ This file is no longer available.` instead of opening a new tab displaying raw JSON.
+  8. **Updated Unit Tests & Screenshots:**
+     - Added 5 new tests in `client/tests/lab-02/MyTickets.test.tsx` and `AttachmentSection.test.tsx` (total client tests: 53/53 passed).
+     - Server tests: 60/60 passed.
+     - Playwright tests: 4/4 passed.
+     - Total automated tests: 117/117 passed (100%).
+     - Recaptured desktop, tablet, and mobile screenshots reflecting the new table column, sort carets, and pagination.
+
+### Files changed
+- `server/src/app.ts`: Added `updatedAt` and `summary` to `validSorts` and `updatedAt` to mapped ticket items.
+- `client/src/api.ts`: Added `updatedAt: string` to `TicketListItem`.
+- `client/src/components/TicketTable.tsx`: Added `Last Updated` column and clickable sortable headers with carets.
+- `client/src/components/Pagination.tsx`: Numbered buttons and `Showing` summary matching labsheet mockup.
+- `client/src/components/AttachmentSection.tsx`: In-app 404 download error handling.
+- `client/src/pages/MyTickets.tsx`: Status sorting, BR-12 Empty/No results fix, category retry, error table replacement.
+- `client/src/styles/theme.css`: Zen Green pagination button styles.
+- `client/tests/lab-02/AttachmentSection.test.tsx`: Added download 404 error test.
+- `client/tests/lab-02/MyTickets.test.tsx`: Added empty with filter, error replaces table, category retry, and sort header tests.
+- `client/tests/lab-02/ResponsiveLayout.test.tsx`: Updated mock ticket items with `updatedAt`.
+- `artifacts/lab-02/screenshots/**`: Updated screenshot evidence.
+- `docs/lab-02/implementation-log.md`: Appended review fixes entry.
+
+### Verification run
+- `cd server && npm test` -> Pass; 11 test files, 60 tests passed
+- `cd client && npm test` -> Pass; 10 test files, 53 tests passed
+- `npx playwright test` -> Pass; 2 test files, 4 tests passed
+- `npm run build --prefix server; npm run build --prefix client` -> Pass; 0 errors
+
 
 
 

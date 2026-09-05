@@ -173,9 +173,11 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
     // Deterministic sort: primary sort + secondary sort by id
     const validSorts = [
       "createdAt",
+      "updatedAt",
       "ticketNumber",
       "requestedPriority",
       "currentStatus",
+      "summary",
     ];
     const sortField =
       typeof sort === "string" && validSorts.includes(sort)
@@ -231,6 +233,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       requestedPriority: t.requestedPriority,
       currentStatus: t.currentStatus,
       createdAt: t.createdAt.toISOString(),
+      updatedAt: t.updatedAt.toISOString(),
     }));
 
     res.status(200).json({

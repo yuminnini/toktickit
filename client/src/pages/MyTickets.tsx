@@ -18,6 +18,7 @@ export default function MyTickets() {
   const navigate = useNavigate();
 
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
   const [ticketsData, setTicketsData] = useState<TicketListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,12 +35,22 @@ export default function MyTickets() {
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Load categories once
-  useEffect(() => {
+  // Load categories with error handling and retry
+  const loadCategories = useCallback(() => {
+    setCategoryError(null);
     fetchCategories()
-      .then((cats) => setCategories(cats))
-      .catch(() => {});
+      .then((cats) => {
+        setCategories(cats);
+        setCategoryError(null);
+      })
+      .catch(() => {
+        setCategoryError("Unable to load categories for filtering.");
+      });
   }, []);
+
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
 
   // Reset when requester changes (Peer review #4)
   useEffect(() => {
@@ -125,21 +136,32 @@ export default function MyTickets() {
     setPage(1);
   };
 
+  const handleHeaderSort = (field: string) => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+    setPage(1);
+  };
+
   const hasActiveFilters =
     search.trim() !== "" ||
     selectedCategory !== "" ||
     selectedPriority !== "" ||
     selectedStatus !== "";
 
+  // BR-12: Empty state is strictly when requester has never submitted a ticket (unfilteredTotal === 0)
   const isTrulyEmpty =
     ticketsData !== null &&
-    ticketsData.unfilteredTotal === 0 &&
-    !hasActiveFilters;
+    ticketsData.unfilteredTotal === 0;
 
+  // BR-12: No results is when requester has tickets, but active filters match zero
   const isNoResults =
     ticketsData !== null &&
-    ticketsData.total === 0 &&
-    (hasActiveFilters || ticketsData.unfilteredTotal > 0);
+    ticketsData.unfilteredTotal > 0 &&
+    ticketsData.total === 0;
 
   return (
     <div className="zen-container py-4">
@@ -160,17 +182,31 @@ export default function MyTickets() {
         </button>
       </div>
 
-      {/* Filter and Search Bar */}
+      {/* Category Load Error Warning */}
+      {categoryError && (
+        <div className="alert alert-warning py-2 px-3 mb-3 d-flex justify-content-between align-items-center small" role="alert">
+          <span>⚠️ {categoryError}</span>
+          <button
+            type="button"
+            className="btn btn-outline-warning btn-sm text-dark"
+            onClick={loadCategories}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Search & Filter Controls Bar */}
       <div className="zen-card mb-4">
-        <div className="row g-3">
-          {/* Search */}
-          <div className="col-12 col-lg-4">
-            <label htmlFor="ticket-search" className="form-label small fw-semibold text-muted">
+        <div className="row g-2 align-items-end">
+          {/* Search Input */}
+          <div className="col-12 col-md-4">
+            <label htmlFor="ticket-search-input" className="form-label small fw-semibold text-muted">
               Search
             </label>
             <input
-              id="ticket-search"
-              type="text"
+              id="ticket-search-input"
+              type="search"
               className="form-control form-control-zen"
               placeholder="Search by ticket number or summary…"
               value={search}
@@ -181,13 +217,13 @@ export default function MyTickets() {
             />
           </div>
 
-          {/* Category */}
+          {/* Category Filter */}
           <div className="col-6 col-sm-3 col-lg-2">
-            <label htmlFor="ticket-cat-filter" className="form-label small fw-semibold text-muted">
+            <label htmlFor="ticket-category-filter" className="form-label small fw-semibold text-muted">
               Category
             </label>
             <select
-              id="ticket-cat-filter"
+              id="ticket-category-filter"
               className="form-select form-control-zen"
               value={selectedCategory}
               onChange={(e) => {
@@ -204,7 +240,7 @@ export default function MyTickets() {
             </select>
           </div>
 
-          {/* Priority */}
+          {/* Priority Filter */}
           <div className="col-6 col-sm-3 col-lg-2">
             <label htmlFor="ticket-prio-filter" className="form-label small fw-semibold text-muted">
               Priority
@@ -266,9 +302,12 @@ export default function MyTickets() {
             >
               <option value="createdAt-desc">Newest First</option>
               <option value="createdAt-asc">Oldest First</option>
+              <option value="updatedAt-desc">Recently Updated</option>
               <option value="ticketNumber-asc">Ticket # (Asc)</option>
               <option value="ticketNumber-desc">Ticket # (Desc)</option>
               <option value="requestedPriority-desc">Priority</option>
+              <option value="currentStatus-asc">Status (A-Z)</option>
+              <option value="currentStatus-desc">Status (Z-A)</option>
             </select>
           </div>
 
@@ -319,21 +358,25 @@ export default function MyTickets() {
         </div>
       )}
 
+      {/* Error state: Replaces the table per ui-spec.md and review feedback */}
       {error && (
-        <div className="alert alert-danger d-flex justify-content-between align-items-center" role="alert">
-          <div>{error}</div>
-          <button
-            type="button"
-            className="btn btn-outline-danger btn-sm"
-            onClick={loadTickets}
-          >
-            Retry
-          </button>
+        <div className="zen-card py-5 text-center my-3" role="alert">
+          <div className="alert alert-danger d-inline-flex flex-column align-items-center gap-3 p-4 mb-0" style={{ maxWidth: "480px" }}>
+            <div className="fw-semibold">Unable to load your tickets</div>
+            <div className="small text-muted">{error}</div>
+            <button
+              type="button"
+              className="btn-zen-primary btn-sm"
+              onClick={loadTickets}
+            >
+              Retry
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Empty State (AC-07 / BR-12) */}
-      {isTrulyEmpty && !loading && (
+      {/* Empty State (AC-07 / BR-12) - Shown only when no error and never had tickets */}
+      {!error && isTrulyEmpty && !loading && (
         <div className="zen-card text-center py-5 empty-state">
           <div className="mb-3 text-muted" style={{ fontSize: "2.5rem" }}>
             📋
@@ -352,8 +395,8 @@ export default function MyTickets() {
         </div>
       )}
 
-      {/* No Results State (AC-08 / BR-12) */}
-      {isNoResults && !loading && (
+      {/* No Results State (AC-08 / BR-12) - Shown only when no error, has tickets overall, but filter yields 0 */}
+      {!error && isNoResults && !loading && (
         <div className="zen-card text-center py-5 no-results-state">
           <div className="mb-3 text-muted" style={{ fontSize: "2.5rem" }}>
             🔍
@@ -373,11 +416,16 @@ export default function MyTickets() {
       )}
 
       {/* Ticket List Display (Desktop: Table ≥992px, Mobile/Tablet: Cards <992px) */}
-      {ticketsData && ticketsData.data.length > 0 && (
+      {!error && ticketsData && ticketsData.data.length > 0 && (
         <div className="zen-card p-0 overflow-hidden">
           {/* Desktop Table (≥992px per ui-spec.md §8) */}
           <div className="d-none d-lg-block">
-            <TicketTable tickets={ticketsData.data} />
+            <TicketTable
+              tickets={ticketsData.data}
+              sortField={sortField}
+              sortOrder={sortOrder}
+              onSort={handleHeaderSort}
+            />
           </div>
 
           {/* Tablet/Mobile Stacked Cards (<992px per ui-spec.md §8) */}

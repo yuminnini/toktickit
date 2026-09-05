@@ -106,6 +106,7 @@ describe("MyTickets Component (UI-05, UI-06, UI-07, UI-11)", () => {
           requestedPriority: "MEDIUM",
           currentStatus: "NEW",
           createdAt: "2026-09-01T10:00:00Z",
+          updatedAt: "2026-09-01T10:00:00Z",
         },
       ],
       page: 1,
@@ -144,6 +145,7 @@ describe("MyTickets Component (UI-05, UI-06, UI-07, UI-11)", () => {
           requestedPriority: "HIGH",
           currentStatus: "NEW",
           createdAt: "2026-09-02T10:00:00Z",
+          updatedAt: "2026-09-02T10:00:00Z",
         },
       ],
       page: 1,
@@ -211,6 +213,7 @@ describe("MyTickets Component (UI-05, UI-06, UI-07, UI-11)", () => {
           requestedPriority: "HIGH",
           currentStatus: "NEW",
           createdAt: "2026-09-02T10:00:00Z",
+          updatedAt: "2026-09-02T10:00:00Z",
         },
       ],
       page: 1,
@@ -250,6 +253,7 @@ describe("MyTickets Component (UI-05, UI-06, UI-07, UI-11)", () => {
           requestedPriority: "LOW",
           currentStatus: "NEW",
           createdAt: "2026-09-01T10:00:00Z",
+          updatedAt: "2026-09-01T10:00:00Z",
         },
       ],
       page: 1,
@@ -278,6 +282,7 @@ describe("MyTickets Component (UI-05, UI-06, UI-07, UI-11)", () => {
         requestedPriority: "LOW",
         currentStatus: "NEW",
         createdAt: "2026-09-01T10:00:00Z",
+        updatedAt: "2026-09-01T10:00:00Z",
       })),
       page: 1,
       pageSize: 10,
@@ -313,6 +318,7 @@ describe("MyTickets Component (UI-05, UI-06, UI-07, UI-11)", () => {
         requestedPriority: "LOW",
         currentStatus: "NEW",
         createdAt: "2026-09-01T10:00:00Z",
+        updatedAt: "2026-09-01T10:00:00Z",
       })),
       page: 2,
       pageSize: 10,
@@ -345,6 +351,7 @@ describe("MyTickets Component (UI-05, UI-06, UI-07, UI-11)", () => {
           requestedPriority: "LOW",
           currentStatus: "NEW",
           createdAt: "2026-09-01T10:00:00Z",
+          updatedAt: "2026-09-01T10:00:00Z",
         },
       ],
       page: 1,
@@ -397,6 +404,7 @@ describe("MyTickets Component (UI-05, UI-06, UI-07, UI-11)", () => {
           requestedPriority: "LOW",
           currentStatus: "NEW",
           createdAt: "2026-09-01T10:00:00Z",
+          updatedAt: "2026-09-01T10:00:00Z",
         },
       ],
       page: 1,
@@ -430,6 +438,158 @@ describe("MyTickets Component (UI-05, UI-06, UI-07, UI-11)", () => {
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenLastCalledWith(
         expect.objectContaining({ pageSize: 20, page: 1 }),
+        expect.any(AbortSignal)
+      );
+    });
+  });
+
+  it("BR-12: renders Empty state when unfilteredTotal is 0 even if search filter is active", async () => {
+    vi.spyOn(api, "fetchTickets").mockResolvedValue({
+      data: [],
+      page: 1,
+      pageSize: 10,
+      total: 0,
+      totalPages: 0,
+      unfilteredTotal: 0, // Never submitted a ticket
+    });
+
+    render(
+      <MemoryRouter>
+        <RequesterContext.Provider
+          value={{
+            requester: { id: 1, name: "Alice" },
+            setRequester: vi.fn(),
+            clearRequester: vi.fn(),
+          }}
+        >
+          <MyTickets />
+        </RequesterContext.Provider>
+      </MemoryRouter>
+    );
+
+    const searchInput = screen.getByPlaceholderText(/search by ticket/i);
+    fireEvent.change(searchInput, { target: { value: "hardware" } });
+
+    // Despite active search, unfilteredTotal === 0 means Empty state (not No Results)
+    await waitFor(() => {
+      expect(screen.getByText(/no tickets yet/i)).toBeInTheDocument();
+      expect(screen.queryByText(/no tickets found/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it("replaces the table and pagination when ticket loading fails", async () => {
+    vi.spyOn(api, "fetchTickets").mockRejectedValue(new Error("Network disconnect"));
+
+    render(
+      <MemoryRouter>
+        <RequesterContext.Provider
+          value={{
+            requester: { id: 1, name: "Alice" },
+            setRequester: vi.fn(),
+            clearRequester: vi.fn(),
+          }}
+        >
+          <MyTickets />
+        </RequesterContext.Provider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/unable to load your tickets/i)).toBeInTheDocument();
+      expect(screen.getByText(/network disconnect/i)).toBeInTheDocument();
+    });
+
+    // Table and pagination must be completely hidden
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/ticket pagination/i)).not.toBeInTheDocument();
+  });
+
+  it("shows warning banner with Retry button when fetchCategories fails", async () => {
+    const fetchCatsSpy = vi.spyOn(api, "fetchCategories").mockRejectedValue(new Error("Database offline"));
+    vi.spyOn(api, "fetchTickets").mockResolvedValue({
+      data: [],
+      page: 1,
+      pageSize: 10,
+      total: 0,
+      totalPages: 0,
+      unfilteredTotal: 0,
+    });
+
+    render(
+      <MemoryRouter>
+        <RequesterContext.Provider
+          value={{
+            requester: { id: 1, name: "Alice" },
+            setRequester: vi.fn(),
+            clearRequester: vi.fn(),
+          }}
+        >
+          <MyTickets />
+        </RequesterContext.Provider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/unable to load categories for filtering/i)).toBeInTheDocument();
+    });
+
+    const retryBtn = screen.getByRole("button", { name: /retry/i });
+    expect(retryBtn).toBeInTheDocument();
+
+    // Clicking retry calls fetchCategories again
+    fetchCatsSpy.mockResolvedValueOnce([{ id: 1, name: "Hardware" }]);
+    fireEvent.click(retryBtn);
+
+    await waitFor(() => {
+      expect(fetchCatsSpy).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("renders Last Updated header and allows clicking sortable headers", async () => {
+    const fetchSpy = vi.spyOn(api, "fetchTickets").mockResolvedValue({
+      data: [
+        {
+          id: 1,
+          ticketNumber: "TKT-2026-000001",
+          summary: "First Ticket",
+          category: "Hardware",
+          requestedPriority: "LOW",
+          currentStatus: "NEW",
+          createdAt: "2026-09-01T10:00:00Z",
+          updatedAt: "2026-09-02T12:00:00Z",
+        },
+      ],
+      page: 1,
+      pageSize: 10,
+      total: 1,
+      totalPages: 1,
+      unfilteredTotal: 1,
+    });
+
+    render(
+      <MemoryRouter>
+        <RequesterContext.Provider
+          value={{
+            requester: { id: 1, name: "Alice" },
+            setRequester: vi.fn(),
+            clearRequester: vi.fn(),
+          }}
+        >
+          <MyTickets />
+        </RequesterContext.Provider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /sort by last updated/i })).toBeInTheDocument();
+    });
+
+    const sortStatusBtn = screen.getByRole("button", { name: /sort by status/i });
+    fireEvent.click(sortStatusBtn);
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: "currentStatus", order: "asc" }),
         expect.any(AbortSignal)
       );
     });
