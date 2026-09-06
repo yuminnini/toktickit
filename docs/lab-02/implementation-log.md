@@ -397,7 +397,39 @@
 - `npx playwright test` -> Pass; 2 test files, 4 tests passed
 - `npm run build --prefix server; npm run build --prefix client` -> Pass; 0 errors
 
+---
 
+## 2026-09-06 - Issue: Phase 8 - Release PR to Main, Lab 2 Reproducible Setup & Test Hardening
 
+- Branch: `test/lab2-e2e-evidence` -> `lab2-staging` -> `main`
+- Scope completed:
+  - **Behavioral Test Hardening**:
+    - **Download Verification (`E2E-01`)**: Intercepted browser download event via `page.waitForEvent("download")`, verified filename (`sample-attachment.png`), read downloaded file from disk, and validated exact binary byte equality against fixture. Verified that soft-removed attachments immediately return `404 NOT_FOUND` on download attempts.
+    - **Multi-Layer Ownership Isolation (`E2E-02`)**: Verified Requester B cannot view Requester A's ticket in UI list; cannot access via direct URL (renders 404 UI); cannot access via `GET /api/tickets/:id` (404); cannot access attachment metadata via `GET /api/attachments/:id` (404); cannot download attachment via `GET /api/attachments/:id/download` (404); cannot soft-remove attachment via `DELETE /api/attachments/:id` (404); and confirmed ticket list API excludes foreign tickets.
+    - **Visual & Screenshot Verification (`RESP-01`, `RESP-02`)**: Verified key interactive elements are rendered before taking each screenshot (preventing false passes on blank/broken pages). Added disk verification confirming all 9 screenshot files exist, are non-empty (>10 KB), and start with PNG signature bytes (`\x89PNG\r\n\x1a\n`).
+  - **Root Scripts & Tooling (`package.json`)**:
+    - Added `"build"`, `"db:migrate"`, and `"db:seed"` convenience scripts to root `package.json`.
+  - **Comprehensive Lab 2 Documentation (`README.md`)**:
+    - Completely replaced Lab 1 content with full Lab 2 specification.
+    - Added reproducible, step-by-step setup pipeline for fresh machines: install root dependencies -> server/client dependencies -> Playwright chromium browser -> migrate -> seed -> build -> test.
+    - Documented custom PostgreSQL port 5233.
+    - Added feature breakdown, architecture summary, and 117-test evidence table.
+    - Removed lingering commit/push notes from end of document.
+  - **Release Execution**:
+    - Merged `test/lab2-e2e-evidence` into `lab2-staging`.
+    - Merged `lab2-staging` into `main`.
 
+### Files changed
+- `e2e/lab-02/requester-ticket-flow.spec.ts`: Real download interception, binary byte matching, soft-removal download rejection, multi-layered API ownership isolation.
+- `e2e/lab-02/responsive.spec.ts`: Element visibility assertions prior to screenshots, disk file existence, size, and PNG header assertions.
+- `package.json`: Added `build`, `db:migrate`, `db:seed` root scripts.
+- `README.md`: Complete Lab 2 documentation with fresh-machine reproducible instructions.
+- `docs/lab-02/tests.md`: Updated Section 6 Final Test Evidence with 117 passing tests.
+- `docs/lab-02/implementation-log.md`: Appended Phase 8 completion log.
 
+### Verification run
+- `npm run test:server` -> Pass; 11 test files, 60 tests passed (5.5s)
+- `npm run test:client` -> Pass; 10 test files, 53 tests passed (21.1s)
+- `npm run test:e2e` -> Pass; 2 test files, 4 tests passed (12.2s)
+- `npm run build` -> Pass; server tsc and client Vite build succeeded (0 errors)
+- `npm test` -> Pass; 117 automated tests passed (100% pass rate)

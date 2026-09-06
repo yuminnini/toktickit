@@ -11,6 +11,22 @@ for (const sub of ["create-ticket", "my-tickets", "ticket-detail"]) {
   }
 }
 
+// Assert that a captured screenshot exists, is non-empty (>10KB), and is a valid PNG
+function assertValidScreenshot(filePath: string) {
+  expect(fs.existsSync(filePath), `Screenshot file ${filePath} must exist`).toBe(true);
+  const stats = fs.statSync(filePath);
+  expect(
+    stats.size,
+    `Screenshot file ${filePath} must be larger than 10KB to ensure complete visual rendering (got ${stats.size} bytes)`
+  ).toBeGreaterThan(10000);
+  const buffer = fs.readFileSync(filePath);
+  const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  expect(
+    buffer.subarray(0, 8).equals(pngHeader),
+    `Screenshot file ${filePath} must contain valid PNG header signature`
+  ).toBe(true);
+}
+
 test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, ยง8.7, ยง8.8)", () => {
   let sampleTicketId = 1;
 
@@ -74,35 +90,54 @@ test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, ย
     await page.waitForLoadState("networkidle");
     await assertNoHorizontalScroll(page);
 
+    // Verify key UI elements are rendered
+    await expect(page.getByRole("heading", { level: 1, name: /my tickets/i })).toBeVisible();
+    await expect(page.locator("#ticket-search-input")).toBeVisible();
+    await expect(page.getByText("Jennifer Anderson")).toBeVisible();
+
     // Verify card layout is active on mobile (<992px), table is hidden
     await expect(page.locator(".ticket-cards")).toBeVisible();
+    await expect(page.locator(".ticket-card-item").first()).toBeVisible();
     await expect(page.locator(".ticket-table-container")).toBeHidden();
 
-    // Save screenshot
-    await page.screenshot({
-      path: path.join(screenshotBaseDir, "my-tickets/mobile.png"),
-      fullPage: true,
-    });
+    // Save and verify screenshot
+    const myTicketsMobilePath = path.join(screenshotBaseDir, "my-tickets/mobile.png");
+    await page.screenshot({ path: myTicketsMobilePath, fullPage: true });
+    assertValidScreenshot(myTicketsMobilePath);
 
     // 2. Create Ticket (Mobile)
     await page.goto("/tickets/new");
     await page.waitForLoadState("networkidle");
     await assertNoHorizontalScroll(page);
 
-    await page.screenshot({
-      path: path.join(screenshotBaseDir, "create-ticket/mobile.png"),
-      fullPage: true,
-    });
+    // Verify all form fields and controls are rendered
+    await expect(page.getByRole("heading", { level: 1, name: /^create ticket$/i })).toBeVisible();
+    await expect(page.locator("#categoryId")).toBeVisible();
+    await expect(page.locator("#relatedSystemId")).toBeVisible();
+    await expect(page.locator("#summary")).toBeVisible();
+    await expect(page.locator("#description")).toBeVisible();
+    await expect(page.locator("#requestedPriority")).toBeVisible();
+    await expect(page.locator("#attachment-input")).toBeAttached();
+    await expect(page.getByRole("button", { name: /submit ticket/i })).toBeVisible();
+
+    const createMobilePath = path.join(screenshotBaseDir, "create-ticket/mobile.png");
+    await page.screenshot({ path: createMobilePath, fullPage: true });
+    assertValidScreenshot(createMobilePath);
 
     // 3. Ticket Detail (Mobile)
     await page.goto(`/tickets/${sampleTicketId}`);
     await page.waitForLoadState("networkidle");
     await assertNoHorizontalScroll(page);
 
-    await page.screenshot({
-      path: path.join(screenshotBaseDir, "ticket-detail/mobile.png"),
-      fullPage: true,
-    });
+    // Verify read-only ticket elements and attachments section are rendered
+    await expect(page.locator("h1.ticket-number")).toBeVisible();
+    await expect(page.locator("h1.ticket-number")).toHaveText(/^TKT-\d{4}-\d{6}$/);
+    await expect(page.locator(".badge").first()).toBeVisible();
+    await expect(page.locator(".attachment-section")).toBeVisible();
+
+    const detailMobilePath = path.join(screenshotBaseDir, "ticket-detail/mobile.png");
+    await page.screenshot({ path: detailMobilePath, fullPage: true });
+    assertValidScreenshot(detailMobilePath);
   });
 
   test("RESP-02: Tablet (1024px) & Desktop (1280px) Viewports", async ({ page }) => {
@@ -113,33 +148,38 @@ test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, ย
     await page.goto("/my-tickets");
     await page.waitForLoadState("networkidle");
     await assertNoHorizontalScroll(page);
+    await expect(page.getByRole("heading", { level: 1, name: /my tickets/i })).toBeVisible();
     await expect(page.locator(".ticket-table-container")).toBeVisible();
+    await expect(page.locator(".ticket-table-container tbody tr").first()).toBeVisible();
     await expect(page.locator(".ticket-cards")).toBeHidden();
 
-    await page.screenshot({
-      path: path.join(screenshotBaseDir, "my-tickets/tablet.png"),
-      fullPage: true,
-    });
+    const myTicketsTabletPath = path.join(screenshotBaseDir, "my-tickets/tablet.png");
+    await page.screenshot({ path: myTicketsTabletPath, fullPage: true });
+    assertValidScreenshot(myTicketsTabletPath);
 
     // Create Ticket (Tablet)
     await page.goto("/tickets/new");
     await page.waitForLoadState("networkidle");
     await assertNoHorizontalScroll(page);
+    await expect(page.getByRole("heading", { level: 1, name: /^create ticket$/i })).toBeVisible();
+    await expect(page.locator("#categoryId")).toBeVisible();
+    await expect(page.locator("#summary")).toBeVisible();
 
-    await page.screenshot({
-      path: path.join(screenshotBaseDir, "create-ticket/tablet.png"),
-      fullPage: true,
-    });
+    const createTabletPath = path.join(screenshotBaseDir, "create-ticket/tablet.png");
+    await page.screenshot({ path: createTabletPath, fullPage: true });
+    assertValidScreenshot(createTabletPath);
 
     // Ticket Detail (Tablet)
     await page.goto(`/tickets/${sampleTicketId}`);
     await page.waitForLoadState("networkidle");
     await assertNoHorizontalScroll(page);
+    await expect(page.locator("h1.ticket-number")).toBeVisible();
+    await expect(page.locator("h1.ticket-number")).toHaveText(/^TKT-\d{4}-\d{6}$/);
+    await expect(page.locator(".attachment-section")).toBeVisible();
 
-    await page.screenshot({
-      path: path.join(screenshotBaseDir, "ticket-detail/tablet.png"),
-      fullPage: true,
-    });
+    const detailTabletPath = path.join(screenshotBaseDir, "ticket-detail/tablet.png");
+    await page.screenshot({ path: detailTabletPath, fullPage: true });
+    assertValidScreenshot(detailTabletPath);
 
     // --- Desktop Viewport (1280px) ---
     await page.setViewportSize({ width: 1280, height: 720 });
@@ -148,32 +188,37 @@ test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, ย
     await page.goto("/my-tickets");
     await page.waitForLoadState("networkidle");
     await assertNoHorizontalScroll(page);
+    await expect(page.getByRole("heading", { level: 1, name: /my tickets/i })).toBeVisible();
     await expect(page.locator(".ticket-table-container")).toBeVisible();
+    await expect(page.locator(".ticket-table-container tbody tr").first()).toBeVisible();
     await expect(page.locator(".ticket-cards")).toBeHidden();
 
-    await page.screenshot({
-      path: path.join(screenshotBaseDir, "my-tickets/desktop.png"),
-      fullPage: true,
-    });
+    const myTicketsDesktopPath = path.join(screenshotBaseDir, "my-tickets/desktop.png");
+    await page.screenshot({ path: myTicketsDesktopPath, fullPage: true });
+    assertValidScreenshot(myTicketsDesktopPath);
 
     // Create Ticket (Desktop)
     await page.goto("/tickets/new");
     await page.waitForLoadState("networkidle");
     await assertNoHorizontalScroll(page);
+    await expect(page.getByRole("heading", { level: 1, name: /^create ticket$/i })).toBeVisible();
+    await expect(page.locator("#categoryId")).toBeVisible();
+    await expect(page.locator("#summary")).toBeVisible();
 
-    await page.screenshot({
-      path: path.join(screenshotBaseDir, "create-ticket/desktop.png"),
-      fullPage: true,
-    });
+    const createDesktopPath = path.join(screenshotBaseDir, "create-ticket/desktop.png");
+    await page.screenshot({ path: createDesktopPath, fullPage: true });
+    assertValidScreenshot(createDesktopPath);
 
     // Ticket Detail (Desktop)
     await page.goto(`/tickets/${sampleTicketId}`);
     await page.waitForLoadState("networkidle");
     await assertNoHorizontalScroll(page);
+    await expect(page.locator("h1.ticket-number")).toBeVisible();
+    await expect(page.locator("h1.ticket-number")).toHaveText(/^TKT-\d{4}-\d{6}$/);
+    await expect(page.locator(".attachment-section")).toBeVisible();
 
-    await page.screenshot({
-      path: path.join(screenshotBaseDir, "ticket-detail/desktop.png"),
-      fullPage: true,
-    });
+    const detailDesktopPath = path.join(screenshotBaseDir, "ticket-detail/desktop.png");
+    await page.screenshot({ path: detailDesktopPath, fullPage: true });
+    assertValidScreenshot(detailDesktopPath);
   });
 });

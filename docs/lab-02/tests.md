@@ -116,12 +116,28 @@ cd server && npm test
 
 # Client tests
 cd client && npm test
-```
-To be filled in after implementation phases (Phase 2–7) are complete and all tests are run
-against the final `main` branch — not before. Placeholder until then; no test is marked
-"Pass" based on assumption.
+```bash
+# Playwright E2E tests
+npm run test:e2e
 
-## 7. Known Limitations or Deferred Tests
+# Run all 117 automated tests
+npm test
+```
+
+## 6. Final Test Evidence
+
+All 117 automated tests pass across 23 test suites (100% pass rate):
+
+### Test Execution Breakdown
+- **Server Suite** (`npm run test:server`): 11 test files, 60 tests passed (100%).
+- **Client Suite** (`npm run test:client`): 10 test files, 53 tests passed (100%).
+- **E2E Suite** (`npm run test:e2e`): 2 test files, 4 tests passed (100%).
+  - `E2E-01`: Ticket flow with real browser download, byte matching against fixture, and soft removal download rejection.
+  - `E2E-02`: Multi-layer requester isolation across UI, Ticket API, Attachment Metadata API, Attachment Download API, Soft-Removal API, and Ticket List API.
+  - `RESP-01`: 375px mobile viewport visual element verification and screenshot file integrity checks.
+  - `RESP-02`: 1024px tablet & 1280px desktop viewport responsive table/card layout switching and screenshot file integrity checks.
+- **Total Tests**: **117 passed**, 0 failed, 0 skipped.
+
 - E2E and responsive tests (E2E-01/02, RESP-01/02) require Create Ticket, My Tickets, and
   Ticket Detail all implemented — they can only be run starting Phase 6/7, not written as
   passing tests before then, though they are written failing/pending earlier per TDD.
