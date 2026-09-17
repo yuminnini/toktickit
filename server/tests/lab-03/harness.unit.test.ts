@@ -121,6 +121,29 @@ describe("HARNESS-01: Test Harness Isolation Guard", () => {
       expect(result.error).toMatch(/escapes the project workspace root/);
     });
 
+    it("rejects directory junctions or symlinks pointing into development upload directory", () => {
+      const junctionPath = path.resolve(workspaceRoot, "scratch_test_junction");
+      const devTarget = path.resolve(workspaceRoot, "server", "uploads");
+      if (!fs.existsSync(devTarget)) {
+        fs.mkdirSync(devTarget, { recursive: true });
+      }
+
+      try {
+        fs.symlinkSync(devTarget, junctionPath, "junction");
+        const result = validateUploadDir(junctionPath, workspaceRoot);
+        expect(result.valid).toBe(false);
+        expect(result.error).toMatch(/collides with or resides inside development upload directory/);
+      } finally {
+        if (fs.existsSync(junctionPath)) {
+          try {
+            fs.rmdirSync(junctionPath);
+          } catch {
+            fs.unlinkSync(junctionPath);
+          }
+        }
+      }
+    });
+
     it("accepts valid isolated test upload directory", () => {
       const testUpload = path.resolve(workspaceRoot, "server", "uploads_test");
       const result = validateUploadDir(testUpload, workspaceRoot);

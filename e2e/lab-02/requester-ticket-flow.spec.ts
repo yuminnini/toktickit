@@ -2,6 +2,9 @@ import { test, expect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
+const API_PORT = process.env.TEST_API_PORT || "3103";
+const API_BASE_URL = process.env.API_URL || `http://localhost:${API_PORT}`;
+
 test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, AC-11, AC-13, AC-14, AC-15)", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -125,9 +128,6 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
     // Download and remove buttons should no longer exist in UI for this attachment
     await expect(downloadBtn).not.toBeVisible();
     await expect(removeBtn).not.toBeVisible();
-
-const API_PORT = process.env.TEST_API_PORT || "3103";
-const API_BASE_URL = process.env.API_URL || `http://localhost:${API_PORT}`;
 
     // Verify backend rejects download of soft-removed attachment (404 NOT_FOUND per AC-15)
     const removedDownloadRes = await page.request.get(

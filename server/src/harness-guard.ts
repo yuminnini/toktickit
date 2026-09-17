@@ -83,10 +83,54 @@ export function validateDatabaseUrl(rawUrl?: string): DatabaseValidationResult {
   }
 }
 
+// Helper to resolve canonical real path (following symlinks and directory junctions)
+function getRealPath(targetPath: string): string {
+  try {
+    let stat: fs.Stats | undefined;
+    try {
+      stat = fs.lstatSync(targetPath);
+    } catch {
+      // path does not exist
+    }
+
+    if (stat) {
+      return fs.realpathSync.native ? fs.realpathSync.native(targetPath) : fs.realpathSync(targetPath);
+    }
+
+    let cur = path.dirname(targetPath);
+    const parts: string[] = [path.basename(targetPath)];
+    while (cur && !fs.existsSync(cur) && path.dirname(cur) !== cur) {
+      parts.unshift(path.basename(cur));
+      cur = path.dirname(cur);
+    }
+    if (fs.existsSync(cur)) {
+      const realParent = fs.realpathSync.native ? fs.realpathSync.native(cur) : fs.realpathSync(cur);
+      return path.resolve(realParent, ...parts);
+    }
+  } catch {
+    // fallback
+  }
+  return path.resolve(targetPath);
+}
+
+function normalizeForComparison(p: string): string {
+  const normalized = path.normalize(p);
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+function isSameOrDescendant(parentDir: string, targetPath: string): boolean {
+  const normParent = normalizeForComparison(parentDir);
+  const normTarget = normalizeForComparison(targetPath);
+  if (normParent === normTarget) return true;
+  const rel = path.relative(normParent, normTarget);
+  return !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
 /**
  * Validates that the upload directory is isolated, within the workspace,
  * and does not collide with development uploads, development subdirectories,
  * project root, system roots, or home directories.
+ * Strictly resolves and inspects real paths including symlinks and directory junctions.
  */
 export function validateUploadDir(uploadDir?: string, workspaceRoot?: string): UploadDirValidationResult {
   if (!uploadDir || typeof uploadDir !== "string" || !uploadDir.trim()) {
@@ -95,22 +139,37 @@ export function validateUploadDir(uploadDir?: string, workspaceRoot?: string): U
 
   const root = workspaceRoot ? path.resolve(workspaceRoot) : process.cwd();
   const resolved = path.resolve(root, uploadDir.trim());
+  const realResolved = getRealPath(resolved);
+  const realRoot = getRealPath(root);
 
   // Check against root or drive root
   const parsedPath = path.parse(resolved);
-  if (resolved === parsedPath.root) {
+  const parsedRealPath = path.parse(realResolved);
+  if (resolved === parsedPath.root || realResolved === parsedRealPath.root) {
     return { valid: false, error: "UPLOAD_DIR cannot be the root of the filesystem or drive." };
   }
 
   // Check against project root / workspace root itself
-  if (resolved === root || resolved === path.resolve(root, "..")) {
+  if (
+    normalizeForComparison(resolved) === normalizeForComparison(root) ||
+    normalizeForComparison(realResolved) === normalizeForComparison(realRoot) ||
+    resolved === path.resolve(root, "..") ||
+    realResolved === path.resolve(realRoot, "..")
+  ) {
     return { valid: false, error: `UPLOAD_DIR cannot be the project workspace root '${resolved}'.` };
   }
 
   // Check against user home directory
   const homeDir = process.env.HOME || process.env.USERPROFILE;
-  if (homeDir && path.resolve(homeDir) === resolved) {
-    return { valid: false, error: "UPLOAD_DIR cannot be the user's home directory." };
+  if (homeDir) {
+    const normHome = normalizeForComparison(homeDir);
+    const realHome = normalizeForComparison(getRealPath(homeDir));
+    if (
+      normalizeForComparison(resolved) === normHome ||
+      normalizeForComparison(realResolved) === realHome
+    ) {
+      return { valid: false, error: "UPLOAD_DIR cannot be the user's home directory." };
+    }
   }
 
   // Check against development upload directory (and any subdirectories within them)
@@ -122,28 +181,30 @@ export function validateUploadDir(uploadDir?: string, workspaceRoot?: string): U
   ];
 
   for (const devDir of forbiddenDevDirs) {
-    const rel = path.relative(devDir, resolved);
-    // If rel is empty or doesn't start with '..' and is not absolute, resolved is devDir or inside devDir
-    if (resolved === devDir || (!rel.startsWith("..") && !path.isAbsolute(rel))) {
+    const realDevDir = getRealPath(devDir);
+    if (
+      isSameOrDescendant(devDir, resolved) ||
+      isSameOrDescendant(realDevDir, realResolved) ||
+      isSameOrDescendant(devDir, realResolved)
+    ) {
       return {
         valid: false,
-        error: `UPLOAD_DIR '${resolved}' collides with or resides inside development upload directory '${devDir}'.`,
+        error: `UPLOAD_DIR '${uploadDir}' (resolved: '${realResolved}') collides with or resides inside development upload directory '${devDir}'.`,
       };
     }
   }
 
   // Must not escape workspace root if workspaceRoot is provided
   if (workspaceRoot) {
-    const relative = path.relative(root, resolved);
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    if (!isSameOrDescendant(root, resolved) || !isSameOrDescendant(realRoot, realResolved)) {
       return {
         valid: false,
-        error: `UPLOAD_DIR '${resolved}' escapes the project workspace root '${root}'.`,
+        error: `UPLOAD_DIR '${uploadDir}' (resolved: '${realResolved}') escapes the project workspace root '${root}'.`,
       };
     }
   }
 
-  return { valid: true, resolvedPath: resolved };
+  return { valid: true, resolvedPath: realResolved };
 }
 
 /**
