@@ -1,15 +1,18 @@
+import "../test-env.js";
 import { test, expect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
-// Ensure screenshot directories exist per ui-spec.md ยง14
-const screenshotBaseDir = path.resolve(process.cwd(), "artifacts/lab-02/screenshots");
-for (const sub of ["create-ticket", "my-tickets", "ticket-detail"]) {
-  const dir = path.join(screenshotBaseDir, sub);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
+import { getPrisma } from "../../server/src/prisma.js";
+
+const API_PORT = process.env.TEST_API_PORT || "3103";
+const API_BASE_URL = process.env.API_URL || `http://localhost:${API_PORT}`;
+
+// Ensure test run screenshot directory is isolated per <run-id> without overwriting historical screenshots
+const RUN_ID = process.env.RUN_ID || `run-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+const screenshotBaseDir = process.env.SCREENSHOT_DIR
+  ? path.resolve(process.env.SCREENSHOT_DIR)
+  : path.resolve(process.cwd(), "artifacts/lab-03/screenshots", RUN_ID);
 
 // Assert that a captured screenshot exists, is non-empty (>10KB), and is a valid PNG
 function assertValidScreenshot(filePath: string) {
@@ -29,10 +32,19 @@ function assertValidScreenshot(filePath: string) {
 
 test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, ยง8.7, ยง8.8)", () => {
   let sampleTicketId = 1;
+  let createdSampleTicketId: number | null = null;
 
   test.beforeAll(async ({ request }) => {
+    // Lazily create screenshot subdirectories for this run
+    for (const sub of ["create-ticket", "my-tickets", "ticket-detail"]) {
+      const dir = path.join(screenshotBaseDir, sub);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    }
+
     try {
-      const res = await request.get("http://localhost:3000/api/tickets?requesterId=1&pageSize=1");
+      const res = await request.get(`${API_BASE_URL}/api/tickets?requesterId=1&pageSize=1`);
       let ticketId: number | null = null;
       if (res.ok()) {
         const body = await res.json();
@@ -41,7 +53,7 @@ test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, ย
         }
       }
       if (!ticketId) {
-        const createRes = await request.post("http://localhost:3000/api/tickets", {
+        const createRes = await request.post(`${API_BASE_URL}/api/tickets`, {
           data: {
             requesterId: 1,
             categoryId: 1,
@@ -54,11 +66,77 @@ test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, ย
         if (createRes.ok()) {
           const newTicket = await createRes.json();
           ticketId = newTicket.id;
+          createdSampleTicketId = newTicket.id;
         }
       }
       sampleTicketId = ticketId || 1;
     } catch {
       sampleTicketId = 1;
+    }
+  });
+
+  test.afterAll(async () => {
+    if (!createdSampleTicketId) return;
+
+    const cleanupErrors: string[] = [];
+    const uncleanedResources: string[] = [];
+    let prisma: any = null;
+
+    try {
+      prisma = getPrisma();
+      const uploadDir = process.env.UPLOAD_DIR || "uploads_test";
+
+      try {
+        const attachments = await prisma.attachment.findMany({ where: { ticketId: createdSampleTicketId } });
+        for (const att of attachments) {
+          const fullPath = path.resolve(uploadDir, att.storedFilename);
+          if (fs.existsSync(fullPath)) {
+            try {
+              fs.unlinkSync(fullPath);
+            } catch (err: any) {
+              cleanupErrors.push(`Failed to unlink storage file '${fullPath}': ${err.message}`);
+              uncleanedResources.push(`Attachment file: ${fullPath}`);
+            }
+          }
+        }
+      } catch (err: any) {
+        cleanupErrors.push(`Failed to query attachments for ticket ${createdSampleTicketId}: ${err.message}`);
+        uncleanedResources.push(`Attachments for ticket ${createdSampleTicketId}`);
+      }
+
+      try {
+        await prisma.attachment.deleteMany({ where: { ticketId: createdSampleTicketId } });
+      } catch (err: any) {
+        cleanupErrors.push(`Failed to delete attachments from DB: ${err.message}`);
+        uncleanedResources.push(`Attachment records for ticket ${createdSampleTicketId}`);
+      }
+
+      try {
+        const existing = await prisma.ticket.findUnique({ where: { id: createdSampleTicketId } });
+        if (existing) {
+          await prisma.ticket.delete({ where: { id: createdSampleTicketId } });
+        }
+      } catch (err: any) {
+        cleanupErrors.push(`Failed to delete sample ticket ${createdSampleTicketId} from DB: ${err.message}`);
+        uncleanedResources.push(`Ticket DB record (ID: ${createdSampleTicketId})`);
+      }
+    } catch (err: any) {
+      cleanupErrors.push(`Unexpected error during teardown: ${err.message}`);
+    } finally {
+      if (prisma) {
+        await prisma.$disconnect().catch(() => {});
+      }
+    }
+
+    if (cleanupErrors.length > 0 || uncleanedResources.length > 0) {
+      const details = [
+        `[E2E CLEANUP FAILED] Encountered ${cleanupErrors.length} error(s) during teardown:`,
+        ...cleanupErrors.map((e, idx) => `  ${idx + 1}. ${e}`),
+        ...(uncleanedResources.length > 0
+          ? [`Uncleaned resources:`, ...uncleanedResources.map((r) => `  - ${r}`)]
+          : []),
+      ].join("\n");
+      throw new Error(details);
     }
   });
 

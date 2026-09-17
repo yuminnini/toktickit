@@ -11,12 +11,18 @@ import {
   MAX_FILE_SIZE,
 } from "../../src/services/attachmentStorage.js";
 import { Priority, TicketStatus } from "@prisma/client";
+import { globalHarnessRegistry } from "../../src/harness-guard.js";
 
 // Isolated temporary upload directory per test run (Peer review #7)
 const testUploadDir = fs.mkdtempSync(
   path.join(os.tmpdir(), "toktickit-attachments-")
 );
 process.env.UPLOAD_DIR = testUploadDir;
+globalHarnessRegistry.registerCleanupHandler(() => {
+  if (fs.existsSync(testUploadDir)) {
+    fs.rmSync(testUploadDir, { recursive: true, force: true });
+  }
+});
 
 // Magic bytes for test buffers (Peer review: content-based inspection)
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -147,6 +153,7 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
     const storedFilename = `test-${Date.now()}-${Math.random().toString(36).substring(7)}.png`;
     const filePath = path.join(testUploadDir, storedFilename);
     fs.writeFileSync(filePath, content);
+    globalHarnessRegistry.registerFile(filePath);
 
     return prisma.attachment.create({
       data: {

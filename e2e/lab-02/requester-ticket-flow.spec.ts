@@ -1,6 +1,13 @@
+import "../test-env.js";
 import { test, expect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
+
+import { getPrisma } from "../../server/src/prisma.js";
+import { ResponseRegistrationTracker } from "../../server/src/harness-guard.js";
+
+const API_PORT = process.env.TEST_API_PORT || "3103";
+const API_BASE_URL = process.env.API_URL || `http://localhost:${API_PORT}`;
 
 test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, AC-11, AC-13, AC-14, AC-15)", () => {
   test.describe.configure({ mode: "serial" });
@@ -9,6 +16,142 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
   let createdTicketUrl = "";
   let createdTicketId = "";
   let createdAttachmentId = "";
+  const createdTicketIds: number[] = [];
+  const createdAttachmentIds: number[] = [];
+  const responseTracker = new ResponseRegistrationTracker();
+
+  // Register created resource IDs asynchronously immediately upon response reception,
+  // ensuring IDs are captured even if submitBtn.click() times out or throws.
+  test.beforeEach(async ({ page }) => {
+    page.on("response", (response) => {
+      responseTracker.handleResponse(response);
+    });
+  });
+
+  // Ensure all pending response body parsing completes before Playwright closes the page fixture
+  test.afterEach(async () => {
+    await responseTracker.waitForRegistrations();
+  });
+
+  test.afterAll(async () => {
+    // 1. Wait for all in-flight response ID registrations to resolve
+    await responseTracker.waitForRegistrations();
+
+    // Propagate any response registration/parsing errors so teardown fails explicitly
+    const cleanupErrors: string[] = [...responseTracker.registrationErrors];
+    const uncleanedResources: string[] = [];
+    let prisma: any = null;
+
+    try {
+      prisma = getPrisma();
+      const uploadDir = process.env.UPLOAD_DIR || "uploads_test";
+
+      // 2. Discover and delete all tickets and associated attachments created during this test run
+      const ticketIdSet = new Set<number>([...createdTicketIds, ...responseTracker.ticketIds]);
+      const ticketNumbersToQuery = new Set<string>();
+      if (createdTicketNumber) ticketNumbersToQuery.add(createdTicketNumber);
+      for (const num of responseTracker.ticketNumbers) {
+        ticketNumbersToQuery.add(num);
+      }
+
+      for (const num of ticketNumbersToQuery) {
+        try {
+          const t = await prisma.ticket.findUnique({
+            where: { ticketNumber: num },
+            select: { id: true },
+          });
+          if (t) ticketIdSet.add(t.id);
+        } catch (err: any) {
+          cleanupErrors.push(`Failed to query ticket by number '${num}': ${err.message}`);
+        }
+      }
+
+      for (const tId of ticketIdSet) {
+        let attachments: any[] = [];
+        try {
+          attachments = await prisma.attachment.findMany({ where: { ticketId: tId } });
+        } catch (err: any) {
+          cleanupErrors.push(`Failed to query attachments for ticket ${tId}: ${err.message}`);
+          uncleanedResources.push(`Ticket ${tId}`);
+          continue;
+        }
+
+        for (const att of attachments) {
+          createdAttachmentIds.push(att.id);
+          const fullPath = path.resolve(uploadDir, att.storedFilename);
+          if (fs.existsSync(fullPath)) {
+            try {
+              fs.unlinkSync(fullPath);
+            } catch (err: any) {
+              cleanupErrors.push(`Failed to unlink storage file '${fullPath}': ${err.message}`);
+              uncleanedResources.push(`Attachment file: ${fullPath} (Attachment ID: ${att.id})`);
+            }
+          }
+        }
+
+        try {
+          await prisma.attachment.deleteMany({ where: { ticketId: tId } });
+        } catch (err: any) {
+          cleanupErrors.push(`Failed to delete attachments from DB for ticket ${tId}: ${err.message}`);
+          uncleanedResources.push(`Attachments for ticket ${tId}`);
+        }
+
+        try {
+          const existing = await prisma.ticket.findUnique({ where: { id: tId } });
+          if (existing) {
+            await prisma.ticket.delete({ where: { id: tId } });
+          }
+        } catch (err: any) {
+          cleanupErrors.push(`Failed to delete ticket ${tId} from DB: ${err.message}`);
+          uncleanedResources.push(`Ticket DB record (ID: ${tId})`);
+        }
+      }
+
+      // 3. Clean any remaining standalone attachment records and physical files
+      const attachmentIdSet = new Set<number>([...createdAttachmentIds, ...responseTracker.attachmentIds]);
+      for (const attId of attachmentIdSet) {
+        try {
+          const att = await prisma.attachment.findUnique({ where: { id: attId } });
+          if (att) {
+            const fullPath = path.resolve(uploadDir, att.storedFilename);
+            if (fs.existsSync(fullPath)) {
+              try {
+                fs.unlinkSync(fullPath);
+              } catch (err: any) {
+                cleanupErrors.push(`Failed to unlink storage file '${fullPath}': ${err.message}`);
+                uncleanedResources.push(`Attachment file: ${fullPath}`);
+              }
+            }
+            try {
+              await prisma.attachment.delete({ where: { id: attId } });
+            } catch (err: any) {
+              cleanupErrors.push(`Failed to delete attachment record ${attId}: ${err.message}`);
+              uncleanedResources.push(`Attachment DB record (ID: ${attId})`);
+            }
+          }
+        } catch (err: any) {
+          cleanupErrors.push(`Failed to process attachment ${attId}: ${err.message}`);
+        }
+      }
+    } catch (err: any) {
+      cleanupErrors.push(`Fatal error in teardown execution: ${err.message}`);
+    } finally {
+      if (prisma) {
+        await prisma.$disconnect().catch(() => {});
+      }
+    }
+
+    if (cleanupErrors.length > 0 || uncleanedResources.length > 0) {
+      const details = [
+        `[E2E CLEANUP FAILED] Encountered ${cleanupErrors.length} error(s) during teardown:`,
+        ...cleanupErrors.map((e, idx) => `  ${idx + 1}. ${e}`),
+        ...(uncleanedResources.length > 0
+          ? [`Uncleaned resources:`, ...uncleanedResources.map((r) => `  - ${r}`)]
+          : []),
+      ].join("\n");
+      throw new Error(details);
+    }
+  });
 
   test("E2E-01: Select Requester -> Create Ticket with attachment -> My Tickets -> Ticket Detail, Real Download & Soft Remove", async ({
     page,
@@ -34,8 +177,13 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
     await expect(page).toHaveURL(/.*tickets\/new/);
 
     // 5. Fill Create Ticket form
-    await page.locator("#categoryId").selectOption({ label: "Hardware" });
-    await page.locator("#relatedSystemId").selectOption({ label: "Corporate Laptop" });
+    const categorySelect = page.locator("#categoryId");
+    await expect(categorySelect).not.toBeDisabled();
+    await categorySelect.selectOption({ label: "Hardware" });
+
+    const systemSelect = page.locator("#relatedSystemId");
+    await expect(systemSelect).not.toBeDisabled();
+    await systemSelect.selectOption({ label: "Corporate Laptop" });
     await page.locator("#summary").fill("E2E Test Laptop Screen Glitch");
     await page
       .locator("#description")
@@ -50,9 +198,41 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
     // Verify file is staged in UI
     await expect(page.getByText("sample-attachment.png")).toBeVisible();
 
-    // 7. Submit ticket
+    // 7. Submit ticket - intercept network responses to track IDs immediately
     const submitBtn = page.getByRole("button", { name: /submit ticket/i });
+    const ticketPromise = page.waitForResponse(
+      (resp) => {
+        try {
+          const parsedUrl = new URL(resp.url());
+          return parsedUrl.pathname === "/api/tickets" && resp.request().method() === "POST";
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 15000 }
+    ).catch(() => null);
+
     await submitBtn.click();
+
+    const ticketResp = await ticketPromise;
+    if (ticketResp && ticketResp.ok()) {
+      try {
+        const body = await ticketResp.json();
+        if (body.id) {
+          createdTicketId = String(body.id);
+          if (!createdTicketIds.includes(body.id)) {
+            createdTicketIds.push(body.id);
+          }
+        }
+        if (body.ticketNumber) {
+          createdTicketNumber = body.ticketNumber;
+        }
+      } catch (err: any) {
+        responseTracker.registrationErrors.push(
+          `Failed to parse ticket response in test body: ${err?.message || String(err)}`
+        );
+      }
+    }
 
     // 8. Verify Success Screen appears with Ticket Number
     await expect(page.getByText("Ticket Submitted Successfully!")).toBeVisible();
@@ -74,8 +254,11 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
     createdTicketUrl = page.url();
 
     const idMatch = createdTicketUrl.match(/tickets\/(\d+)/);
-    createdTicketId = idMatch ? idMatch[1] : "";
+    createdTicketId = idMatch ? idMatch[1] : createdTicketId;
     expect(createdTicketId).not.toBe("");
+    if (createdTicketId && !createdTicketIds.includes(Number(createdTicketId))) {
+      createdTicketIds.push(Number(createdTicketId));
+    }
 
     // Verify read-only ticket details
     await expect(page.locator("h1.ticket-number")).toHaveText(createdTicketNumber);
@@ -90,6 +273,9 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
     const testId = await attachmentItem.getAttribute("data-testid");
     createdAttachmentId = testId?.replace("attachment-item-", "") || "";
     expect(createdAttachmentId).not.toBe("");
+    if (createdAttachmentId && !createdAttachmentIds.includes(Number(createdAttachmentId))) {
+      createdAttachmentIds.push(Number(createdAttachmentId));
+    }
 
     // Real Download Verification: Trigger click, intercept download event, verify exact file content
     const downloadBtn = page.getByRole("link", { name: /download sample-attachment\.png/i });
@@ -128,7 +314,7 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
 
     // Verify backend rejects download of soft-removed attachment (404 NOT_FOUND per AC-15)
     const removedDownloadRes = await page.request.get(
-      `http://localhost:3000/api/attachments/${createdAttachmentId}/download?requesterId=1`
+      `${API_BASE_URL}/api/attachments/${createdAttachmentId}/download?requesterId=1`
     );
     expect(removedDownloadRes.status()).toBe(404);
   });
@@ -177,28 +363,28 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
 
     // 7. Enforce multi-layered API ownership isolation (BR-10 non-disclosure rule & AC-03)
     // Attempting to fetch Ticket A details as Requester B (ID: 2) returns 404
-    const ticketApiRes = await request.get(`http://localhost:3000/api/tickets/${createdTicketId}?requesterId=2`);
+    const ticketApiRes = await request.get(`${API_BASE_URL}/api/tickets/${createdTicketId}?requesterId=2`);
     expect(ticketApiRes.status()).toBe(404);
 
     // Attempting to fetch Ticket A attachment metadata as Requester B returns 404
-    const attMetaRes = await request.get(`http://localhost:3000/api/attachments/${createdAttachmentId}?requesterId=2`);
+    const attMetaRes = await request.get(`${API_BASE_URL}/api/attachments/${createdAttachmentId}?requesterId=2`);
     expect(attMetaRes.status()).toBe(404);
 
     // Attempting to download Ticket A attachment as Requester B returns 404
     const attDownloadRes = await request.get(
-      `http://localhost:3000/api/attachments/${createdAttachmentId}/download?requesterId=2`
+      `${API_BASE_URL}/api/attachments/${createdAttachmentId}/download?requesterId=2`
     );
     expect(attDownloadRes.status()).toBe(404);
 
     // Attempting to soft-remove Ticket A attachment as Requester B returns 404
     const attDeleteRes = await request.delete(
-      `http://localhost:3000/api/attachments/${createdAttachmentId}?requesterId=2`,
+      `${API_BASE_URL}/api/attachments/${createdAttachmentId}?requesterId=2`,
       { data: { reason: "Unauthorized delete attempt" } }
     );
     expect(attDeleteRes.status()).toBe(404);
 
     // Verify Requester B's ticket list API payload does not contain Ticket A
-    const listRes = await request.get("http://localhost:3000/api/tickets?requesterId=2");
+    const listRes = await request.get(`${API_BASE_URL}/api/tickets?requesterId=2`);
     expect(listRes.status()).toBe(200);
     const listBody = await listRes.json();
     const containsTicketA = listBody.data?.some((t: any) => t.ticketNumber === createdTicketNumber);
