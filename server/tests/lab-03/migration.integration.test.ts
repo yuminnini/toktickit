@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { getPrisma } from "../../src/prisma.js";
 import { verifyPassword } from "../../src/password.js";
-import { seedDatabase, DEFAULT_INITIAL_PASSWORD } from "../../prisma/seed.js";
+import { seedDatabase, DEFAULT_INITIAL_PASSWORD, SEEDED_USERS } from "../../prisma/seed.js";
 import { ensureTestHarnessReady } from "../../src/harness-guard.js";
 
 describe("Phase F2 / P03: Database Migration & Schema Foundation (AC-14, AC-15, AC-16, AC-17)", () => {
@@ -75,7 +75,7 @@ describe("Phase F2 / P03: Database Migration & Schema Foundation (AC-14, AC-15, 
     expect(users.length).toBeGreaterThanOrEqual(9);
 
     for (const u of users) {
-      if (u.email.includes("@example.com")) {
+      if (SEEDED_USERS.some((s) => s.email === u.email)) {
         expect(u.passwordHash).toBeTruthy();
         expect(u.passwordHash?.startsWith("$argon2id$")).toBe(true);
         expect(u.mustChangePassword).toBe(true);

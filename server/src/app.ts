@@ -14,6 +14,10 @@ import {
   validateFileContent,
 } from "./services/attachmentStorage.js";
 
+import cookieParser from "cookie-parser";
+import { authenticateSession } from "./auth-middleware.js";
+import { authRouter } from "./auth-routes.js";
+
 export const app = express();
 
 /**
@@ -37,8 +41,20 @@ export function extractRequesterId(req: Request): string | undefined {
   return undefined;
 }
 
-app.use(cors());
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, server-to-server) or localhost
+      callback(null, true);
+    },
+    credentials: true,
+  })
+);
+app.use(cookieParser());
 app.use(express.json());
+app.use(authenticateSession);
+
+app.use("/api/auth", authRouter);
 
 // Health Check
 app.get("/api/health", (_req: Request, res: Response) => {

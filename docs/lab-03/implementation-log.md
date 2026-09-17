@@ -44,3 +44,28 @@
   - Existing ticket IDs, numbers, and attachment metadata preserved.
 - **Exit Gate Status**: F2 / P03 completed and verified. Ready for F2 (P04).
 
+## 2026-09-17 — Phase F2 (P04) Authentication Backend & Session Lifecycle
+
+- **Date / Contributor / Model**: 2026-09-17 | yuminnini (b4ymin) | Claude / Gemini
+- **Phase & Work Packages**: F2 (P04) | Issue #28 | Branch: `codex/lab3-p04-auth-backend` | Base: `codex/lab3-p03-migration-seed`
+- **Requirements & ACs**: AC-01, AC-02, AC-05, AC-06, AC-07, AC-08, AC-09, AC-10, AC-11
+- **Files Changed**:
+  - `server/src/auth-types.ts`: Defined `SafeUser`, `SessionData`, and augmented Express Request types.
+  - `server/src/rate-limiter.ts`: Implemented `LoginRateLimiter` with 5 attempts/15-min rolling window and `Retry-After` calculation.
+  - `server/src/session-service.ts`: Implemented session creation, SHA-256 token hashing, HttpOnly cookie configuration, and revocation.
+  - `server/src/auth-middleware.ts`: Implemented `authenticateSession`, `requireAuth`, `requireCompletedPasswordChange`, `requireRole`, and `verifyCsrf`.
+  - `server/src/auth-routes.ts`: Implemented `/api/auth/login`, `/api/auth/me`, `/api/auth/csrf`, `/api/auth/change-password`, and `/api/auth/logout`.
+  - `server/src/app.ts`: Mounted `cookieParser()`, `authenticateSession`, and `/api/auth` router.
+  - `server/tests/lab-03/password.unit.test.ts`: Unit tests for password policy boundaries, Argon2id, and rate limiter (11 passed).
+  - `server/tests/lab-03/auth.api.test.ts`: Integration tests for auth APIs, sessions, CSRF, forced password change, and rate limits (8 passed).
+- **Test Results**:
+  - `server/tests/lab-03/password.unit.test.ts`: 11 passed (exit code 0).
+  - `server/tests/lab-03/auth.api.test.ts`: 8 passed (exit code 0).
+  - Full server suite: 16 test files, 106 passed (exit code 0).
+  - Full client suite: 10 test files, 53 passed (exit code 0).
+- **Regression / Data Preservation**:
+  - All existing routes remain functional.
+  - Sensitive credentials (passwordHash, sessionVersion, tokenHash) are never leaked in API responses.
+- **Exit Gate Status**: F2 / P04 completed and verified. Ready for F2 (P05).
+
+
