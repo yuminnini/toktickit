@@ -2,18 +2,11 @@ import { defineConfig } from "vitest/config";
 import fs from "node:fs";
 import path from "node:path";
 
-// Automatically load .env.test or .env if DATABASE_URL is not set
+// Automatically load .env.test if DATABASE_URL is not set (never fallback to dev .env)
 if (!process.env.DATABASE_URL) {
   const envTestPath = path.resolve(process.cwd(), ".env.test");
-  const envDefaultPath = path.resolve(process.cwd(), ".env");
-  const targetEnv = fs.existsSync(envTestPath)
-    ? envTestPath
-    : fs.existsSync(envDefaultPath)
-    ? envDefaultPath
-    : null;
-
-  if (targetEnv) {
-    const content = fs.readFileSync(targetEnv, "utf-8");
+  if (fs.existsSync(envTestPath)) {
+    const content = fs.readFileSync(envTestPath, "utf-8");
     for (const line of content.split("\n")) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith("#")) continue;
