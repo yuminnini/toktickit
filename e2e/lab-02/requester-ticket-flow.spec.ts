@@ -126,9 +126,12 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
     await expect(downloadBtn).not.toBeVisible();
     await expect(removeBtn).not.toBeVisible();
 
+const API_PORT = process.env.TEST_API_PORT || "3103";
+const API_BASE_URL = process.env.API_URL || `http://localhost:${API_PORT}`;
+
     // Verify backend rejects download of soft-removed attachment (404 NOT_FOUND per AC-15)
     const removedDownloadRes = await page.request.get(
-      `http://localhost:3000/api/attachments/${createdAttachmentId}/download?requesterId=1`
+      `${API_BASE_URL}/api/attachments/${createdAttachmentId}/download?requesterId=1`
     );
     expect(removedDownloadRes.status()).toBe(404);
   });
@@ -177,28 +180,28 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
 
     // 7. Enforce multi-layered API ownership isolation (BR-10 non-disclosure rule & AC-03)
     // Attempting to fetch Ticket A details as Requester B (ID: 2) returns 404
-    const ticketApiRes = await request.get(`http://localhost:3000/api/tickets/${createdTicketId}?requesterId=2`);
+    const ticketApiRes = await request.get(`${API_BASE_URL}/api/tickets/${createdTicketId}?requesterId=2`);
     expect(ticketApiRes.status()).toBe(404);
 
     // Attempting to fetch Ticket A attachment metadata as Requester B returns 404
-    const attMetaRes = await request.get(`http://localhost:3000/api/attachments/${createdAttachmentId}?requesterId=2`);
+    const attMetaRes = await request.get(`${API_BASE_URL}/api/attachments/${createdAttachmentId}?requesterId=2`);
     expect(attMetaRes.status()).toBe(404);
 
     // Attempting to download Ticket A attachment as Requester B returns 404
     const attDownloadRes = await request.get(
-      `http://localhost:3000/api/attachments/${createdAttachmentId}/download?requesterId=2`
+      `${API_BASE_URL}/api/attachments/${createdAttachmentId}/download?requesterId=2`
     );
     expect(attDownloadRes.status()).toBe(404);
 
     // Attempting to soft-remove Ticket A attachment as Requester B returns 404
     const attDeleteRes = await request.delete(
-      `http://localhost:3000/api/attachments/${createdAttachmentId}?requesterId=2`,
+      `${API_BASE_URL}/api/attachments/${createdAttachmentId}?requesterId=2`,
       { data: { reason: "Unauthorized delete attempt" } }
     );
     expect(attDeleteRes.status()).toBe(404);
 
     // Verify Requester B's ticket list API payload does not contain Ticket A
-    const listRes = await request.get("http://localhost:3000/api/tickets?requesterId=2");
+    const listRes = await request.get(`${API_BASE_URL}/api/tickets?requesterId=2`);
     expect(listRes.status()).toBe(200);
     const listBody = await listRes.json();
     const containsTicketA = listBody.data?.some((t: any) => t.ticketNumber === createdTicketNumber);

@@ -6,6 +6,7 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${CLIENT_PORT}`;
 const API_URL = process.env.API_URL || `http://localhost:${API_PORT}`;
 
 export default defineConfig({
+  globalSetup: "./e2e/global-setup.ts",
   testDir: "./e2e",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,

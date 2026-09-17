@@ -21,7 +21,8 @@ export interface PortValidationResult {
 
 /**
  * Validates that the database URL points to a dedicated, isolated test database
- * and prevents accidental connection to production or development databases.
+ * on an authorized local test host and prevents accidental connection to production
+ * or development databases.
  */
 export function validateDatabaseUrl(rawUrl?: string): DatabaseValidationResult {
   if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim()) {
@@ -34,13 +35,25 @@ export function validateDatabaseUrl(rawUrl?: string): DatabaseValidationResult {
       return { valid: false, error: `Invalid protocol '${parsed.protocol}'. Expected postgres:// or postgresql://.` };
     }
 
+    // Must target safe local test host
+    const allowedHosts = ["localhost", "127.0.0.1", "::1", "toktickit-db", "host.docker.internal"];
+    if (!allowedHosts.includes(parsed.hostname.toLowerCase())) {
+      return {
+        valid: false,
+        error: `Database host '${parsed.hostname}' is not an authorized local test host (${allowedHosts.join(", ")}).`,
+      };
+    }
+
     const dbName = parsed.pathname.replace(/^\//, "").split("?")[0];
     if (!dbName) {
       return { valid: false, error: "Database name is missing from DATABASE_URL." };
     }
 
-    // Explicitly reject development/production databases
-    if (dbName === "toktickit" || dbName === "postgres" || dbName === "template1") {
+    const lowerDbName = dbName.toLowerCase();
+
+    // Explicitly reject development/production/system databases
+    const prohibitedDbNames = ["toktickit", "postgres", "template1", "template0"];
+    if (prohibitedDbNames.includes(lowerDbName)) {
       return {
         valid: false,
         error: `Database '${dbName}' is a development or system database. Automated tests must target an isolated test database.`,
@@ -48,11 +61,18 @@ export function validateDatabaseUrl(rawUrl?: string): DatabaseValidationResult {
       };
     }
 
-    // Must be an explicit test database (e.g. toktickit_test)
-    if (!dbName.endsWith("_test") && !dbName.includes("test")) {
+    // Must be an explicit test database naming convention (not substring match like 'contest' or 'latest')
+    const isExplicitTestName =
+      lowerDbName === "toktickit_test" ||
+      lowerDbName === "toktickit_shadow" ||
+      lowerDbName.endsWith("_test") ||
+      lowerDbName.endsWith("-test") ||
+      lowerDbName.startsWith("test_");
+
+    if (!isExplicitTestName) {
       return {
         valid: false,
-        error: `Database '${dbName}' does not appear to be an isolated test database (must include 'test' or end with '_test').`,
+        error: `Database '${dbName}' does not follow the required isolated test database naming convention (must be 'toktickit_test', end with '_test', or start with 'test_').`,
         dbName,
       };
     }
@@ -65,7 +85,8 @@ export function validateDatabaseUrl(rawUrl?: string): DatabaseValidationResult {
 
 /**
  * Validates that the upload directory is isolated, within the workspace,
- * and does not collide with development uploads, system roots, or home directories.
+ * and does not collide with development uploads, development subdirectories,
+ * project root, system roots, or home directories.
  */
 export function validateUploadDir(uploadDir?: string, workspaceRoot?: string): UploadDirValidationResult {
   if (!uploadDir || typeof uploadDir !== "string" || !uploadDir.trim()) {
@@ -81,25 +102,32 @@ export function validateUploadDir(uploadDir?: string, workspaceRoot?: string): U
     return { valid: false, error: "UPLOAD_DIR cannot be the root of the filesystem or drive." };
   }
 
+  // Check against project root / workspace root itself
+  if (resolved === root || resolved === path.resolve(root, "..")) {
+    return { valid: false, error: `UPLOAD_DIR cannot be the project workspace root '${resolved}'.` };
+  }
+
   // Check against user home directory
   const homeDir = process.env.HOME || process.env.USERPROFILE;
   if (homeDir && path.resolve(homeDir) === resolved) {
     return { valid: false, error: "UPLOAD_DIR cannot be the user's home directory." };
   }
 
-  // Check against development upload directory
-  const devUploadDirs = [
+  // Check against development upload directory (and any subdirectories within them)
+  const forbiddenDevDirs = [
     path.resolve(root, "uploads"),
     path.resolve(root, "server", "uploads"),
     path.resolve(root, "..", "uploads"),
     path.resolve(root, "..", "server", "uploads"),
   ];
 
-  for (const devDir of devUploadDirs) {
-    if (resolved === devDir) {
+  for (const devDir of forbiddenDevDirs) {
+    const rel = path.relative(devDir, resolved);
+    // If rel is empty or doesn't start with '..' and is not absolute, resolved is devDir or inside devDir
+    if (resolved === devDir || (!rel.startsWith("..") && !path.isAbsolute(rel))) {
       return {
         valid: false,
-        error: `UPLOAD_DIR '${resolved}' collides with the development upload directory '${devDir}'.`,
+        error: `UPLOAD_DIR '${resolved}' collides with or resides inside development upload directory '${devDir}'.`,
       };
     }
   }
@@ -198,6 +226,8 @@ export class TestHarnessRegistry {
   }
 }
 
+export const globalHarnessRegistry = new TestHarnessRegistry();
+
 /**
  * Pre-flight guard ensuring the test harness is properly isolated before any test suite runs.
  */
@@ -217,6 +247,12 @@ export async function ensureTestHarnessReady(options?: {
   const uploadResult = validateUploadDir(uploadDir, options?.workspaceRoot);
   if (!uploadResult.valid) {
     throw new Error(`[HARNESS-01 GUARD FAILED] Upload directory is not safely isolated: ${uploadResult.error}`);
+  }
+
+  // Enforce isolated upload directory in process.env so attachment storage never falls back to dev
+  process.env.UPLOAD_DIR = uploadResult.resolvedPath;
+  if (!fs.existsSync(uploadResult.resolvedPath!)) {
+    fs.mkdirSync(uploadResult.resolvedPath!, { recursive: true });
   }
 
   if (options?.port) {

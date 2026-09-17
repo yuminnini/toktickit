@@ -25,6 +25,13 @@ describe("HARNESS-01: Test Harness Isolation Guard", () => {
       expect(result.error).toMatch(/Invalid protocol/);
     });
 
+    it("rejects non-local hostnames (remote/cloud databases)", () => {
+      const remoteUrl = "postgresql://toktickit:toktickit@remote-prod-db.aws.com:5432/toktickit_test";
+      const result = validateDatabaseUrl(remoteUrl);
+      expect(result.valid).toBe(false);
+      expect(result.error).toMatch(/not an authorized local test host/);
+    });
+
     it("rejects development database 'toktickit'", () => {
       const devUrl = "postgresql://toktickit:toktickit@localhost:5233/toktickit?schema=public";
       const result = validateDatabaseUrl(devUrl);
@@ -32,22 +39,40 @@ describe("HARNESS-01: Test Harness Isolation Guard", () => {
       expect(result.error).toMatch(/development or system database/);
     });
 
-    it("rejects system databases 'postgres' and 'template1'", () => {
+    it("rejects system databases 'postgres', 'template0', and 'template1'", () => {
       expect(validateDatabaseUrl("postgresql://toktickit:toktickit@localhost:5233/postgres").valid).toBe(false);
       expect(validateDatabaseUrl("postgresql://toktickit:toktickit@localhost:5233/template1").valid).toBe(false);
+      expect(validateDatabaseUrl("postgresql://toktickit:toktickit@localhost:5233/template0").valid).toBe(false);
     });
 
-    it("rejects databases lacking 'test' naming convention", () => {
+    it("rejects databases lacking explicit test naming convention", () => {
       const result = validateDatabaseUrl("postgresql://toktickit:toktickit@localhost:5233/production_app");
       expect(result.valid).toBe(false);
-      expect(result.error).toMatch(/must include 'test' or end with '_test'/);
+      expect(result.error).toMatch(/does not follow the required isolated test database naming convention/);
     });
 
-    it("accepts valid isolated test database 'toktickit_test'", () => {
+    it("rejects database names containing 'test' as a substring inside another word (e.g. 'contest', 'fastest')", () => {
+      const contestResult = validateDatabaseUrl("postgresql://toktickit:toktickit@localhost:5233/contest");
+      expect(contestResult.valid).toBe(false);
+      expect(contestResult.error).toMatch(/does not follow the required isolated test database naming convention/);
+
+      const fastestResult = validateDatabaseUrl("postgresql://toktickit:toktickit@localhost:5233/fastest");
+      expect(fastestResult.valid).toBe(false);
+      expect(fastestResult.error).toMatch(/does not follow the required isolated test database naming convention/);
+    });
+
+    it("accepts valid isolated test database 'toktickit_test' on localhost/127.0.0.1", () => {
       const testUrl = "postgresql://toktickit:toktickit@localhost:5233/toktickit_test?schema=public";
       const result = validateDatabaseUrl(testUrl);
       expect(result.valid).toBe(true);
       expect(result.dbName).toBe("toktickit_test");
+    });
+
+    it("accepts valid isolated test database 'toktickit_shadow'", () => {
+      const shadowUrl = "postgresql://toktickit:toktickit@127.0.0.1:5233/toktickit_shadow?schema=public";
+      const result = validateDatabaseUrl(shadowUrl);
+      expect(result.valid).toBe(true);
+      expect(result.dbName).toBe("toktickit_shadow");
     });
   });
 
@@ -64,16 +89,29 @@ describe("HARNESS-01: Test Harness Isolation Guard", () => {
       expect(result.error).toMatch(/cannot be the root/);
     });
 
-    it("rejects colliding with development upload directories", () => {
+    it("rejects project workspace root itself as upload directory", () => {
+      const result = validateUploadDir(".", workspaceRoot);
+      expect(result.valid).toBe(false);
+      expect(result.error).toMatch(/cannot be the project workspace root/);
+    });
+
+    it("rejects colliding with development upload directories directly", () => {
       const devUpload1 = path.resolve(workspaceRoot, "uploads");
       const result1 = validateUploadDir(devUpload1, workspaceRoot);
       expect(result1.valid).toBe(false);
-      expect(result1.error).toMatch(/collides with the development upload directory/);
+      expect(result1.error).toMatch(/collides with or resides inside development upload directory/);
 
       const devUpload2 = path.resolve(workspaceRoot, "server", "uploads");
       const result2 = validateUploadDir(devUpload2, workspaceRoot);
       expect(result2.valid).toBe(false);
-      expect(result2.error).toMatch(/collides with the development upload directory/);
+      expect(result2.error).toMatch(/collides with or resides inside development upload directory/);
+    });
+
+    it("rejects subdirectories inside development upload directories (e.g. server/uploads/attachments)", () => {
+      const subDevUpload = path.resolve(workspaceRoot, "server", "uploads", "attachments");
+      const result = validateUploadDir(subDevUpload, workspaceRoot);
+      expect(result.valid).toBe(false);
+      expect(result.error).toMatch(/collides with or resides inside development upload directory/);
     });
 
     it("rejects path escaping workspace root", () => {
@@ -99,7 +137,6 @@ describe("HARNESS-01: Test Harness Isolation Guard", () => {
 
     it("identifies available ephemeral test port", async () => {
       const result = await validatePort(3103);
-      // In CI / local environment, 3103 should be available
       expect(typeof result.available).toBe("boolean");
     });
   });
@@ -151,7 +188,10 @@ describe("HARNESS-01: Test Harness Isolation Guard", () => {
       ).rejects.toThrow(/HARNESS-01 GUARD FAILED/);
     });
 
-    it("passes when all parameters are properly isolated", async () => {
+    it("passes when all parameters are properly isolated and sets process.env.UPLOAD_DIR", async () => {
+      const previous = process.env.UPLOAD_DIR;
+      delete process.env.UPLOAD_DIR;
+
       await expect(
         ensureTestHarnessReady({
           dbUrl: "postgresql://toktickit:toktickit@localhost:5233/toktickit_test?schema=public",
@@ -159,6 +199,11 @@ describe("HARNESS-01: Test Harness Isolation Guard", () => {
           workspaceRoot,
         })
       ).resolves.toBeUndefined();
+
+      expect(process.env.UPLOAD_DIR).toBeDefined();
+      expect(process.env.UPLOAD_DIR).toContain("uploads_test");
+
+      process.env.UPLOAD_DIR = previous;
     });
   });
 });

@@ -2,8 +2,14 @@ import { test, expect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
-// Ensure screenshot directories exist per ui-spec.md ยง14
-const screenshotBaseDir = path.resolve(process.cwd(), "artifacts/lab-02/screenshots");
+const API_PORT = process.env.TEST_API_PORT || "3103";
+const API_BASE_URL = process.env.API_URL || `http://localhost:${API_PORT}`;
+
+// Ensure test run screenshot directory is isolated without overwriting historical Lab 2 screenshots
+const screenshotBaseDir = process.env.SCREENSHOT_DIR
+  ? path.resolve(process.env.SCREENSHOT_DIR)
+  : path.resolve(process.cwd(), "artifacts/test-runs/screenshots");
+
 for (const sub of ["create-ticket", "my-tickets", "ticket-detail"]) {
   const dir = path.join(screenshotBaseDir, sub);
   if (!fs.existsSync(dir)) {
@@ -32,7 +38,7 @@ test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, ย
 
   test.beforeAll(async ({ request }) => {
     try {
-      const res = await request.get("http://localhost:3000/api/tickets?requesterId=1&pageSize=1");
+      const res = await request.get(`${API_BASE_URL}/api/tickets?requesterId=1&pageSize=1`);
       let ticketId: number | null = null;
       if (res.ok()) {
         const body = await res.json();
@@ -41,7 +47,7 @@ test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, ย
         }
       }
       if (!ticketId) {
-        const createRes = await request.post("http://localhost:3000/api/tickets", {
+        const createRes = await request.post(`${API_BASE_URL}/api/tickets`, {
           data: {
             requesterId: 1,
             categoryId: 1,
