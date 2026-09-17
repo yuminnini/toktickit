@@ -99,19 +99,19 @@ describe("HARNESS-01: Test Harness Isolation Guard", () => {
       const devUpload1 = path.resolve(workspaceRoot, "uploads");
       const result1 = validateUploadDir(devUpload1, workspaceRoot);
       expect(result1.valid).toBe(false);
-      expect(result1.error).toMatch(/collides with or resides inside development upload directory/);
+      expect(result1.error).toMatch(/collides with.*development upload directory/);
 
       const devUpload2 = path.resolve(workspaceRoot, "server", "uploads");
       const result2 = validateUploadDir(devUpload2, workspaceRoot);
       expect(result2.valid).toBe(false);
-      expect(result2.error).toMatch(/collides with or resides inside development upload directory/);
+      expect(result2.error).toMatch(/collides with.*development upload directory/);
     });
 
     it("rejects subdirectories inside development upload directories (e.g. server/uploads/attachments)", () => {
       const subDevUpload = path.resolve(workspaceRoot, "server", "uploads", "attachments");
       const result = validateUploadDir(subDevUpload, workspaceRoot);
       expect(result.valid).toBe(false);
-      expect(result.error).toMatch(/collides with or resides inside development upload directory/);
+      expect(result.error).toMatch(/collides with.*development upload directory/);
     });
 
     it("rejects path escaping workspace root", () => {
@@ -132,7 +132,7 @@ describe("HARNESS-01: Test Harness Isolation Guard", () => {
         fs.symlinkSync(devTarget, junctionPath, "junction");
         const result = validateUploadDir(junctionPath, workspaceRoot);
         expect(result.valid).toBe(false);
-        expect(result.error).toMatch(/collides with or resides inside development upload directory/);
+        expect(result.error).toMatch(/collides with.*development upload directory/);
       } finally {
         if (fs.existsSync(junctionPath)) {
           try {
@@ -142,6 +142,23 @@ describe("HARNESS-01: Test Harness Isolation Guard", () => {
           }
         }
       }
+    });
+
+    it("rejects parent directories enclosing development upload directory (e.g. server/ or server)", () => {
+      const serverDir = path.resolve(workspaceRoot, "server");
+      const result1 = validateUploadDir(serverDir, workspaceRoot);
+      expect(result1.valid).toBe(false);
+
+      const serverSlash = "server/";
+      const result2 = validateUploadDir(serverSlash, workspaceRoot);
+      expect(result2.valid).toBe(false);
+    });
+
+    it("rejects critical project source directories (e.g. client, e2e)", () => {
+      const clientDir = path.resolve(workspaceRoot, "client");
+      const result = validateUploadDir(clientDir, workspaceRoot);
+      expect(result.valid).toBe(false);
+      expect(result.error).toMatch(/project source\/root directory/);
     });
 
     it("accepts valid isolated test upload directory", () => {

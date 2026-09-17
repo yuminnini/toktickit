@@ -2,20 +2,16 @@ import { test, expect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
+import { getPrisma } from "../../server/src/prisma.js";
+
 const API_PORT = process.env.TEST_API_PORT || "3103";
 const API_BASE_URL = process.env.API_URL || `http://localhost:${API_PORT}`;
 
-// Ensure test run screenshot directory is isolated without overwriting historical Lab 2 screenshots
+// Ensure test run screenshot directory is isolated per <run-id> without overwriting historical screenshots
+const RUN_ID = process.env.RUN_ID || `run-${new Date().toISOString().replace(/[:.]/g, "-")}`;
 const screenshotBaseDir = process.env.SCREENSHOT_DIR
   ? path.resolve(process.env.SCREENSHOT_DIR)
-  : path.resolve(process.cwd(), "artifacts/test-runs/screenshots");
-
-for (const sub of ["create-ticket", "my-tickets", "ticket-detail"]) {
-  const dir = path.join(screenshotBaseDir, sub);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
+  : path.resolve(process.cwd(), "artifacts/lab-03/screenshots", RUN_ID);
 
 // Assert that a captured screenshot exists, is non-empty (>10KB), and is a valid PNG
 function assertValidScreenshot(filePath: string) {
@@ -35,8 +31,17 @@ function assertValidScreenshot(filePath: string) {
 
 test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, §8.7, §8.8)", () => {
   let sampleTicketId = 1;
+  let createdSampleTicketId: number | null = null;
 
   test.beforeAll(async ({ request }) => {
+    // Lazily create screenshot subdirectories for this run
+    for (const sub of ["create-ticket", "my-tickets", "ticket-detail"]) {
+      const dir = path.join(screenshotBaseDir, sub);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    }
+
     try {
       const res = await request.get(`${API_BASE_URL}/api/tickets?requesterId=1&pageSize=1`);
       let ticketId: number | null = null;
@@ -60,11 +65,25 @@ test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, �
         if (createRes.ok()) {
           const newTicket = await createRes.json();
           ticketId = newTicket.id;
+          createdSampleTicketId = newTicket.id;
         }
       }
       sampleTicketId = ticketId || 1;
     } catch {
       sampleTicketId = 1;
+    }
+  });
+
+  test.afterAll(async () => {
+    if (createdSampleTicketId) {
+      try {
+        const prisma = getPrisma();
+        await prisma.attachment.deleteMany({ where: { ticketId: createdSampleTicketId } });
+        await prisma.ticket.delete({ where: { id: createdSampleTicketId } });
+        await prisma.$disconnect();
+      } catch (err) {
+        console.warn(`[E2E CLEANUP] Failed to clean up responsive sample ticket ${createdSampleTicketId}:`, err);
+      }
     }
   });
 

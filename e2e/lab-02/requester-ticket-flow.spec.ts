@@ -2,6 +2,8 @@ import { test, expect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
+import { getPrisma } from "../../server/src/prisma.js";
+
 const API_PORT = process.env.TEST_API_PORT || "3103";
 const API_BASE_URL = process.env.API_URL || `http://localhost:${API_PORT}`;
 
@@ -12,6 +14,59 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
   let createdTicketUrl = "";
   let createdTicketId = "";
   let createdAttachmentId = "";
+  const createdTicketIds: number[] = [];
+  const createdAttachmentIds: number[] = [];
+
+  test.afterAll(async () => {
+    try {
+      const prisma = getPrisma();
+      const uploadDir = process.env.UPLOAD_DIR || "uploads_test";
+
+      // 1. Discover and delete all tickets and associated attachments created during this test run
+      const ticketIdSet = new Set<number>(createdTicketIds);
+      if (createdTicketNumber) {
+        const t = await prisma.ticket.findUnique({
+          where: { ticketNumber: createdTicketNumber },
+          select: { id: true },
+        });
+        if (t) ticketIdSet.add(t.id);
+      }
+
+      for (const tId of ticketIdSet) {
+        const attachments = await prisma.attachment.findMany({ where: { ticketId: tId } });
+        for (const att of attachments) {
+          const fullPath = path.resolve(uploadDir, att.storedFilename);
+          if (fs.existsSync(fullPath)) {
+            try {
+              fs.unlinkSync(fullPath);
+            } catch {}
+          }
+        }
+        await prisma.attachment.deleteMany({ where: { ticketId: tId } });
+        await prisma.ticket.delete({ where: { id: tId } }).catch(() => null);
+      }
+
+      // 2. Clean any remaining tracked attachment records and physical files
+      for (const attId of createdAttachmentIds) {
+        try {
+          const att = await prisma.attachment.findUnique({ where: { id: attId } });
+          if (att) {
+            const fullPath = path.resolve(uploadDir, att.storedFilename);
+            if (fs.existsSync(fullPath)) {
+              try {
+                fs.unlinkSync(fullPath);
+              } catch {}
+            }
+            await prisma.attachment.delete({ where: { id: attId } });
+          }
+        } catch {}
+      }
+
+      await prisma.$disconnect();
+    } catch (err) {
+      console.warn("[E2E CLEANUP] Teardown error:", err);
+    }
+  });
 
   test("E2E-01: Select Requester -> Create Ticket with attachment -> My Tickets -> Ticket Detail, Real Download & Soft Remove", async ({
     page,
@@ -53,9 +108,28 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
     // Verify file is staged in UI
     await expect(page.getByText("sample-attachment.png")).toBeVisible();
 
-    // 7. Submit ticket
+    // 7. Submit ticket - intercept network responses to track IDs immediately
     const submitBtn = page.getByRole("button", { name: /submit ticket/i });
+    const ticketPromise = page.waitForResponse(
+      (resp) => resp.url().includes("/api/tickets") && resp.request().method() === "POST",
+      { timeout: 15000 }
+    ).catch(() => null);
+
     await submitBtn.click();
+
+    const ticketResp = await ticketPromise;
+    if (ticketResp && ticketResp.ok()) {
+      try {
+        const body = await ticketResp.json();
+        if (body.id) {
+          createdTicketId = String(body.id);
+          createdTicketIds.push(body.id);
+        }
+        if (body.ticketNumber) {
+          createdTicketNumber = body.ticketNumber;
+        }
+      } catch {}
+    }
 
     // 8. Verify Success Screen appears with Ticket Number
     await expect(page.getByText("Ticket Submitted Successfully!")).toBeVisible();
@@ -77,8 +151,11 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
     createdTicketUrl = page.url();
 
     const idMatch = createdTicketUrl.match(/tickets\/(\d+)/);
-    createdTicketId = idMatch ? idMatch[1] : "";
+    createdTicketId = idMatch ? idMatch[1] : createdTicketId;
     expect(createdTicketId).not.toBe("");
+    if (createdTicketId && !createdTicketIds.includes(Number(createdTicketId))) {
+      createdTicketIds.push(Number(createdTicketId));
+    }
 
     // Verify read-only ticket details
     await expect(page.locator("h1.ticket-number")).toHaveText(createdTicketNumber);
@@ -93,6 +170,9 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
     const testId = await attachmentItem.getAttribute("data-testid");
     createdAttachmentId = testId?.replace("attachment-item-", "") || "";
     expect(createdAttachmentId).not.toBe("");
+    if (createdAttachmentId && !createdAttachmentIds.includes(Number(createdAttachmentId))) {
+      createdAttachmentIds.push(Number(createdAttachmentId));
+    }
 
     // Real Download Verification: Trigger click, intercept download event, verify exact file content
     const downloadBtn = page.getByRole("link", { name: /download sample-attachment\.png/i });

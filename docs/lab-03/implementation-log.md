@@ -39,8 +39,20 @@
     3. Enhanced `validateUploadDir` in `server/src/harness-guard.ts` to resolve canonical real paths (`fs.realpathSync.native`), strictly checking lexical and real path containment for junctions/symlinks; added test coverage.
     4. Converted `server/tests/setup-harness.ts` to top-level `await ensureTestHarnessReady()`, executing before test module imports.
     5. Updated `afterAll` in `server/tests/setup-harness.ts` to throw descriptive error on cleanup failure, failing test run.
+- **Peer Review Iteration 3**:
+  - Reviewer feedback:
+    1. `[P2]` DB fallback value not passed to `globalSetup` when `DATABASE_URL` is unset in env.
+    2. `[P2]` Upload guard accepted parent directories enclosing dev uploads (e.g. `server/`).
+    3. `[P2]` E2E tests lacked teardown/cleanup for created tickets and uploaded files.
+    4. `[P2]` Screenshots overwritten between runs; lacked `<run-id>` isolation.
+  - Fixes applied:
+    1. Synchronized `process.env.DATABASE_URL` and `process.env.UPLOAD_DIR` in `playwright.config.ts` so `globalSetup`, `webServer`, and worker processes share identical configuration.
+    2. Enhanced `validateUploadDir` with `hasPathOverlap` (bidirectional containment check) and explicit protection for project directories (`server`, `client`, `e2e`, etc.), rejecting `server/`; added unit test coverage (now 25 unit tests).
+    3. Added full `test.afterAll` teardown in `e2e/lab-02/requester-ticket-flow.spec.ts` and `e2e/lab-02/responsive.spec.ts`, tracking created ticket and attachment IDs, deleting database records via Prisma, and unlinking physical files from `UPLOAD_DIR`.
+    4. Added `RUN_ID` to screenshot directory paths in `e2e/lab-02/responsive.spec.ts` (`artifacts/lab-03/screenshots/<run-id>/...`) and moved `fs.mkdirSync` from module import to `test.beforeAll`.
 - **Test Results (Post-Fixes)**:
-  - `server/tests/lab-03/harness.unit.test.ts`: 23 passed (exit code 0).
-  - `server` baseline suite: 12 test files, 83 passed (exit code 0).
+  - `server/tests/lab-03/harness.unit.test.ts`: 25 passed (exit code 0).
+  - `server` baseline suite: 12 test files, 85 passed (exit code 0).
   - `client` baseline suite: 10 test files, 53 passed (exit code 0).
-- **Exit Gate Status**: In progress — P02 needs fixes (Peer review Round 2 changes implemented & verified, ready for reviewer re-check).
+  - `playwright` E2E suite: 2 test files, 4 passed (exit code 0, duration 19.3s).
+- **Exit Gate Status**: In progress — P02 needs fixes (Peer review Round 3 changes implemented & verified, full suites 85/53/4 passed, ready for reviewer re-inspection).

@@ -126,11 +126,16 @@ function isSameOrDescendant(parentDir: string, targetPath: string): boolean {
   return !rel.startsWith("..") && !path.isAbsolute(rel);
 }
 
+function hasPathOverlap(dirA: string, dirB: string): boolean {
+  return isSameOrDescendant(dirA, dirB) || isSameOrDescendant(dirB, dirA);
+}
+
 /**
  * Validates that the upload directory is isolated, within the workspace,
  * and does not collide with development uploads, development subdirectories,
  * project root, system roots, or home directories.
  * Strictly resolves and inspects real paths including symlinks and directory junctions.
+ * Enforces bidirectional containment checks (rejects both descendants and ancestors of dev uploads).
  */
 export function validateUploadDir(uploadDir?: string, workspaceRoot?: string): UploadDirValidationResult {
   if (!uploadDir || typeof uploadDir !== "string" || !uploadDir.trim()) {
@@ -159,6 +164,32 @@ export function validateUploadDir(uploadDir?: string, workspaceRoot?: string): U
     return { valid: false, error: `UPLOAD_DIR cannot be the project workspace root '${resolved}'.` };
   }
 
+  // Check against critical project source directories
+  const forbiddenProjectDirs = [
+    root,
+    path.resolve(root, "server"),
+    path.resolve(root, "server", "src"),
+    path.resolve(root, "client"),
+    path.resolve(root, "client", "src"),
+    path.resolve(root, "e2e"),
+    path.resolve(root, "docs"),
+    path.resolve(root, ".git"),
+    path.resolve(root, "node_modules"),
+  ];
+
+  for (const projDir of forbiddenProjectDirs) {
+    const realProjDir = getRealPath(projDir);
+    if (
+      normalizeForComparison(resolved) === normalizeForComparison(projDir) ||
+      normalizeForComparison(realResolved) === normalizeForComparison(realProjDir)
+    ) {
+      return {
+        valid: false,
+        error: `UPLOAD_DIR cannot be the project source/root directory '${projDir}'.`,
+      };
+    }
+  }
+
   // Check against user home directory
   const homeDir = process.env.HOME || process.env.USERPROFILE;
   if (homeDir) {
@@ -172,7 +203,7 @@ export function validateUploadDir(uploadDir?: string, workspaceRoot?: string): U
     }
   }
 
-  // Check against development upload directory (and any subdirectories within them)
+  // Check against development upload directory (bidirectional: neither inside nor enclosing dev uploads)
   const forbiddenDevDirs = [
     path.resolve(root, "uploads"),
     path.resolve(root, "server", "uploads"),
@@ -183,13 +214,14 @@ export function validateUploadDir(uploadDir?: string, workspaceRoot?: string): U
   for (const devDir of forbiddenDevDirs) {
     const realDevDir = getRealPath(devDir);
     if (
-      isSameOrDescendant(devDir, resolved) ||
-      isSameOrDescendant(realDevDir, realResolved) ||
-      isSameOrDescendant(devDir, realResolved)
+      hasPathOverlap(devDir, resolved) ||
+      hasPathOverlap(realDevDir, realResolved) ||
+      hasPathOverlap(devDir, realResolved) ||
+      hasPathOverlap(realDevDir, resolved)
     ) {
       return {
         valid: false,
-        error: `UPLOAD_DIR '${uploadDir}' (resolved: '${realResolved}') collides with or resides inside development upload directory '${devDir}'.`,
+        error: `UPLOAD_DIR '${uploadDir}' (resolved: '${realResolved}') collides with, encloses, or resides inside development upload directory '${devDir}'.`,
       };
     }
   }

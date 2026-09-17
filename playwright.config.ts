@@ -37,6 +37,13 @@ await ensureTestHarnessReady({
 // The validated and canonical upload directory from process.env
 const validatedUploadDir = process.env.UPLOAD_DIR || targetUploadDir;
 
+// Synchronize process.env so globalSetup, webServers, and test worker processes share the exact same configuration
+process.env.DATABASE_URL = targetDbUrl;
+process.env.UPLOAD_DIR = validatedUploadDir;
+process.env.PORT = API_PORT;
+process.env.API_URL = API_URL;
+process.env.BASE_URL = BASE_URL;
+
 export default defineConfig({
   globalSetup: "./e2e/global-setup.ts",
   testDir: "./e2e",
