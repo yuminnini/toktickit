@@ -6,6 +6,10 @@ import { PrismaClient } from "@prisma/client";
 let client: PrismaClient | null = null;
 
 export function getPrisma(): PrismaClient {
-  if (!client) client = new PrismaClient();
+  if (!client) {
+    client = new PrismaClient();
+    // Maintain requesterUser alias pointing to user model
+    (client as unknown as Record<string, unknown>).requesterUser = (client as unknown as Record<string, unknown>).user;
+  }
   return client;
 }
