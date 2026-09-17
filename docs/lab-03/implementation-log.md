@@ -50,9 +50,24 @@
     2. Enhanced `validateUploadDir` with `hasPathOverlap` (bidirectional containment check) and explicit protection for project directories (`server`, `client`, `e2e`, etc.), rejecting `server/`; added unit test coverage (now 25 unit tests).
     3. Added full `test.afterAll` teardown in `e2e/lab-02/requester-ticket-flow.spec.ts` and `e2e/lab-02/responsive.spec.ts`, tracking created ticket and attachment IDs, deleting database records via Prisma, and unlinking physical files from `UPLOAD_DIR`.
     4. Added `RUN_ID` to screenshot directory paths in `e2e/lab-02/responsive.spec.ts` (`artifacts/lab-03/screenshots/<run-id>/...`) and moved `fs.mkdirSync` from module import to `test.beforeAll`.
+- **Peer Review Iteration 4**:
+  - Reviewer feedback:
+    1. `[P2]` Cleanup failure swallowed in E2E suites: `catch {}` and `console.warn` swallowed errors in both suites (`requester-ticket-flow.spec.ts` line 40, `responsive.spec.ts` line 84). If physical file unlinking failed, teardown still continued deleting DB records, leaving orphaned files without failing the test run.
+    2. `[P2]` If `submitBtn.click()` fails/times out after ticket creation, no ID is captured for cleanup: Reading response and recording ID after `await submitBtn.click()` caused IDs to be lost if click failed.
+    3. Status note: Keep P02 as "In progress" and add regression tests for both cases before closing.
+  - Fixes applied:
+    1. Refactored teardown in both `e2e/lab-02/requester-ticket-flow.spec.ts` and `e2e/lab-02/responsive.spec.ts` to collect all errors in `cleanupErrors` and orphaned resources in `uncleanedResources`. If any cleanup operation fails, teardown throws an explicit Error detailing all failed operations and uncleaned resources to fail the test run. Prisma `$disconnect()` is reliably invoked in `finally`.
+    2. In `requester-ticket-flow.spec.ts`, attached `page.on("response")` in `test.beforeEach` using strict URL pathname checks (`/api/tickets` vs `/attachments`) to capture created ticket and attachment IDs immediately upon receiving the response from the backend, independent of whether `submitBtn.click()` succeeds. Stored all asynchronous registrations in `pendingRegistrations` and awaited `Promise.allSettled(pendingRegistrations)` at the beginning of `afterAll` before teardown executes.
+    3. Updated `TestHarnessRegistry` in `server/src/harness-guard.ts` to track `uncleanedResources` and exported `assertCleanupSucceeded()` helper.
+    4. Added 2 regression tests in `server/tests/lab-03/harness.unit.test.ts`:
+       - `assertCleanupSucceeded` throws and lists uncleaned resources when file unlinking/handler fails.
+       - Asynchronous response listener captures created IDs even if subsequent UI action throws.
+  - Fixes verification:
+    - Checked `afterAll` in both specs; confirmed safe idempotent deletion (`findUnique` prior to `delete`) and strict URL pathname matching prevents attachment POSTs from being mistaken for tickets.
 - **Test Results (Post-Fixes)**:
-  - `server/tests/lab-03/harness.unit.test.ts`: 25 passed (exit code 0).
-  - `server` baseline suite: 12 test files, 85 passed (exit code 0).
+  - `server/tests/lab-03/harness.unit.test.ts`: 27 passed (exit code 0).
+  - `server` baseline suite: 12 test files, 87 passed (exit code 0).
   - `client` baseline suite: 10 test files, 53 passed (exit code 0).
-  - `playwright` E2E suite: 2 test files, 4 passed (exit code 0, duration 19.3s).
-- **Exit Gate Status**: In progress — P02 needs fixes (Peer review Round 3 changes implemented & verified, full suites 85/53/4 passed, ready for reviewer re-inspection).
+  - `playwright` E2E suite: 2 test files, 4 passed (exit code 0, duration 15.8s).
+- **Exit Gate Status**: In progress — P02 (Peer review Round 4 changes implemented & verified, 2 regression tests added, full suites 87/53/4 passed, awaiting reviewer re-inspection).
+

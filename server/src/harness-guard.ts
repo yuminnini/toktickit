@@ -284,9 +284,15 @@ export class TestHarnessRegistry {
     this.cleanupHandlers.push(handler);
   }
 
-  async runCleanup(): Promise<{ success: boolean; errors: Error[]; cleanedFiles: string[] }> {
+  async runCleanup(): Promise<{
+    success: boolean;
+    errors: Error[];
+    cleanedFiles: string[];
+    uncleanedResources: string[];
+  }> {
     const errors: Error[] = [];
     const cleanedFiles: string[] = [];
+    const uncleanedResources: string[] = [];
 
     // Clean registered files
     for (const file of this.registeredFiles) {
@@ -297,6 +303,7 @@ export class TestHarnessRegistry {
         }
       } catch (err) {
         errors.push(new Error(`Failed to clean up file '${file}': ${(err as Error).message}`));
+        uncleanedResources.push(file);
       }
     }
     this.registeredFiles.clear();
@@ -307,6 +314,7 @@ export class TestHarnessRegistry {
         await handler();
       } catch (err) {
         errors.push(err as Error);
+        uncleanedResources.push(`Cleanup handler: ${(err as Error).message}`);
       }
     }
     this.cleanupHandlers = [];
@@ -315,11 +323,31 @@ export class TestHarnessRegistry {
       success: errors.length === 0,
       errors,
       cleanedFiles,
+      uncleanedResources,
     };
   }
 }
 
 export const globalHarnessRegistry = new TestHarnessRegistry();
+
+/**
+ * Asserts that a cleanup operation succeeded. Throws an error with full
+ * diagnostic details of uncleaned resources if any errors occurred.
+ */
+export function assertCleanupSucceeded(result: {
+  success: boolean;
+  errors: Error[];
+  uncleanedResources?: string[];
+}): void {
+  if (!result.success) {
+    const errorDetails = result.errors.map((e, idx) => `  ${idx + 1}. ${e.message || String(e)}`).join("\n");
+    const uncleaned =
+      result.uncleanedResources && result.uncleanedResources.length > 0
+        ? `\nUncleaned resources:\n${result.uncleanedResources.map((r) => `  - ${r}`).join("\n")}`
+        : "";
+    throw new Error(`[HARNESS-01 CLEANUP FAILED] Test harness cleanup failed:\n${errorDetails}${uncleaned}`);
+  }
+}
 
 /**
  * Pre-flight guard ensuring the test harness is properly isolated before any test suite runs.

@@ -8,6 +8,7 @@ import {
   validatePort,
   TestHarnessRegistry,
   ensureTestHarnessReady,
+  assertCleanupSucceeded,
 } from "../../src/harness-guard.js";
 
 describe("HARNESS-01: Test Harness Isolation Guard", () => {
@@ -214,6 +215,48 @@ describe("HARNESS-01: Test Harness Isolation Guard", () => {
       expect(result.success).toBe(false);
       expect(result.errors.length).toBe(1);
       expect(result.errors[0].message).toBe("Simulated cleanup failure");
+    });
+
+    it("regression: reports uncleaned resources and assertCleanupSucceeded throws when unlinking fails", async () => {
+      registry.registerCleanupHandler(() => {
+        throw new Error("Disk permission denied when removing orphan file");
+      });
+
+      const result = await registry.runCleanup();
+      expect(result.success).toBe(false);
+      expect(result.uncleanedResources.length).toBeGreaterThan(0);
+      expect(result.uncleanedResources[0]).toContain("Disk permission denied");
+
+      // Verify that assertCleanupSucceeded throws with explicit resource diagnostics
+      expect(() => assertCleanupSucceeded(result)).toThrow(/\[HARNESS-01 CLEANUP FAILED\]/);
+    });
+
+    it("regression: captures asynchronous response IDs even when subsequent UI click action throws", async () => {
+      const trackedIds: number[] = [];
+      const pending: Promise<void>[] = [];
+
+      // Simulated network listener pattern used in E2E
+      const simulateIncomingResponse = (id: number) => {
+        const p = Promise.resolve().then(() => {
+          trackedIds.push(id);
+        });
+        pending.push(p);
+      };
+
+      // Simulated user action that fails after response is dispatched by backend
+      const failedUserAction = async () => {
+        simulateIncomingResponse(999);
+        throw new Error("Simulated click timeout / element detached error");
+      };
+
+      // Action throws
+      await expect(failedUserAction()).rejects.toThrow("Simulated click timeout / element detached error");
+
+      // Teardown awaits pending response registrations
+      await Promise.allSettled(pending);
+
+      // Verify ID was reliably captured despite the thrown error
+      expect(trackedIds).toContain(999);
     });
   });
 

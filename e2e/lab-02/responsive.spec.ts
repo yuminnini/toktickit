@@ -1,3 +1,4 @@
+import "../test-env.js";
 import { test, expect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
@@ -75,15 +76,67 @@ test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, Â
   });
 
   test.afterAll(async () => {
-    if (createdSampleTicketId) {
+    if (!createdSampleTicketId) return;
+
+    const cleanupErrors: string[] = [];
+    const uncleanedResources: string[] = [];
+    let prisma: any = null;
+
+    try {
+      prisma = getPrisma();
+      const uploadDir = process.env.UPLOAD_DIR || "uploads_test";
+
       try {
-        const prisma = getPrisma();
-        await prisma.attachment.deleteMany({ where: { ticketId: createdSampleTicketId } });
-        await prisma.ticket.delete({ where: { id: createdSampleTicketId } });
-        await prisma.$disconnect();
-      } catch (err) {
-        console.warn(`[E2E CLEANUP] Failed to clean up responsive sample ticket ${createdSampleTicketId}:`, err);
+        const attachments = await prisma.attachment.findMany({ where: { ticketId: createdSampleTicketId } });
+        for (const att of attachments) {
+          const fullPath = path.resolve(uploadDir, att.storedFilename);
+          if (fs.existsSync(fullPath)) {
+            try {
+              fs.unlinkSync(fullPath);
+            } catch (err: any) {
+              cleanupErrors.push(`Failed to unlink storage file '${fullPath}': ${err.message}`);
+              uncleanedResources.push(`Attachment file: ${fullPath}`);
+            }
+          }
+        }
+      } catch (err: any) {
+        cleanupErrors.push(`Failed to query attachments for ticket ${createdSampleTicketId}: ${err.message}`);
+        uncleanedResources.push(`Attachments for ticket ${createdSampleTicketId}`);
       }
+
+      try {
+        await prisma.attachment.deleteMany({ where: { ticketId: createdSampleTicketId } });
+      } catch (err: any) {
+        cleanupErrors.push(`Failed to delete attachments from DB: ${err.message}`);
+        uncleanedResources.push(`Attachment records for ticket ${createdSampleTicketId}`);
+      }
+
+      try {
+        const existing = await prisma.ticket.findUnique({ where: { id: createdSampleTicketId } });
+        if (existing) {
+          await prisma.ticket.delete({ where: { id: createdSampleTicketId } });
+        }
+      } catch (err: any) {
+        cleanupErrors.push(`Failed to delete sample ticket ${createdSampleTicketId} from DB: ${err.message}`);
+        uncleanedResources.push(`Ticket DB record (ID: ${createdSampleTicketId})`);
+      }
+    } catch (err: any) {
+      cleanupErrors.push(`Unexpected error during teardown: ${err.message}`);
+    } finally {
+      if (prisma) {
+        await prisma.$disconnect().catch(() => {});
+      }
+    }
+
+    if (cleanupErrors.length > 0 || uncleanedResources.length > 0) {
+      const details = [
+        `[E2E CLEANUP FAILED] Encountered ${cleanupErrors.length} error(s) during teardown:`,
+        ...cleanupErrors.map((e, idx) => `  ${idx + 1}. ${e}`),
+        ...(uncleanedResources.length > 0
+          ? [`Uncleaned resources:`, ...uncleanedResources.map((r) => `  - ${r}`)]
+          : []),
+      ].join("\n");
+      throw new Error(details);
     }
   });
 

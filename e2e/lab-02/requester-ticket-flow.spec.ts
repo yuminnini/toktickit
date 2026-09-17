@@ -1,3 +1,4 @@
+import "../test-env.js";
 import { test, expect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
@@ -16,37 +17,114 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
   let createdAttachmentId = "";
   const createdTicketIds: number[] = [];
   const createdAttachmentIds: number[] = [];
+  const pendingRegistrations: Promise<void>[] = [];
+
+  // Register created resource IDs asynchronously immediately upon response reception,
+  // ensuring IDs are captured even if submitBtn.click() times out or throws.
+  test.beforeEach(async ({ page }) => {
+    page.on("response", (response) => {
+      try {
+        const parsedUrl = new URL(response.url());
+        const method = response.request().method();
+        if (parsedUrl.pathname === "/api/tickets" && method === "POST" && response.ok()) {
+          const registration = (async () => {
+            try {
+              const body = await response.json();
+              if (body.id && !createdTicketIds.includes(body.id)) {
+                createdTicketIds.push(body.id);
+                createdTicketId = String(body.id);
+              }
+              if (body.ticketNumber) {
+                createdTicketNumber = body.ticketNumber;
+              }
+            } catch {}
+          })();
+          pendingRegistrations.push(registration);
+        }
+        if (parsedUrl.pathname.includes("/attachments") && method === "POST" && response.ok()) {
+          const registration = (async () => {
+            try {
+              const body = await response.json();
+              if (body.id && !createdAttachmentIds.includes(body.id)) {
+                createdAttachmentIds.push(body.id);
+                createdAttachmentId = String(body.id);
+              }
+            } catch {}
+          })();
+          pendingRegistrations.push(registration);
+        }
+      } catch {}
+    });
+  });
 
   test.afterAll(async () => {
+    // 1. Wait for all in-flight response ID registrations to resolve
+    await Promise.allSettled(pendingRegistrations);
+
+    const cleanupErrors: string[] = [];
+    const uncleanedResources: string[] = [];
+    let prisma: any = null;
+
     try {
-      const prisma = getPrisma();
+      prisma = getPrisma();
       const uploadDir = process.env.UPLOAD_DIR || "uploads_test";
 
-      // 1. Discover and delete all tickets and associated attachments created during this test run
+      // 2. Discover and delete all tickets and associated attachments created during this test run
       const ticketIdSet = new Set<number>(createdTicketIds);
       if (createdTicketNumber) {
-        const t = await prisma.ticket.findUnique({
-          where: { ticketNumber: createdTicketNumber },
-          select: { id: true },
-        });
-        if (t) ticketIdSet.add(t.id);
+        try {
+          const t = await prisma.ticket.findUnique({
+            where: { ticketNumber: createdTicketNumber },
+            select: { id: true },
+          });
+          if (t) ticketIdSet.add(t.id);
+        } catch (err: any) {
+          cleanupErrors.push(`Failed to query ticket by number '${createdTicketNumber}': ${err.message}`);
+        }
       }
 
       for (const tId of ticketIdSet) {
-        const attachments = await prisma.attachment.findMany({ where: { ticketId: tId } });
+        let attachments: any[] = [];
+        try {
+          attachments = await prisma.attachment.findMany({ where: { ticketId: tId } });
+        } catch (err: any) {
+          cleanupErrors.push(`Failed to query attachments for ticket ${tId}: ${err.message}`);
+          uncleanedResources.push(`Ticket ${tId}`);
+          continue;
+        }
+
         for (const att of attachments) {
+          createdAttachmentIds.push(att.id);
           const fullPath = path.resolve(uploadDir, att.storedFilename);
           if (fs.existsSync(fullPath)) {
             try {
               fs.unlinkSync(fullPath);
-            } catch {}
+            } catch (err: any) {
+              cleanupErrors.push(`Failed to unlink storage file '${fullPath}': ${err.message}`);
+              uncleanedResources.push(`Attachment file: ${fullPath} (Attachment ID: ${att.id})`);
+            }
           }
         }
-        await prisma.attachment.deleteMany({ where: { ticketId: tId } });
-        await prisma.ticket.delete({ where: { id: tId } }).catch(() => null);
+
+        try {
+          await prisma.attachment.deleteMany({ where: { ticketId: tId } });
+        } catch (err: any) {
+          cleanupErrors.push(`Failed to delete attachments from DB for ticket ${tId}: ${err.message}`);
+          uncleanedResources.push(`Attachments for ticket ${tId}`);
+        }
+
+        try {
+          const existing = await prisma.ticket.findUnique({ where: { id: tId } });
+          if (existing) {
+            await prisma.ticket.delete({ where: { id: tId } });
+          }
+        } catch (err: any) {
+          cleanupErrors.push(`Failed to delete ticket ${tId} from DB: ${err.message}`);
+          uncleanedResources.push(`Ticket DB record (ID: ${tId})`);
+        }
       }
 
-      // 2. Clean any remaining tracked attachment records and physical files
+      // 3. Clean any remaining standalone attachment records and physical files
       for (const attId of createdAttachmentIds) {
         try {
           const att = await prisma.attachment.findUnique({ where: { id: attId } });
@@ -55,16 +133,39 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
             if (fs.existsSync(fullPath)) {
               try {
                 fs.unlinkSync(fullPath);
-              } catch {}
+              } catch (err: any) {
+                cleanupErrors.push(`Failed to unlink storage file '${fullPath}': ${err.message}`);
+                uncleanedResources.push(`Attachment file: ${fullPath}`);
+              }
             }
-            await prisma.attachment.delete({ where: { id: attId } });
+            try {
+              await prisma.attachment.delete({ where: { id: attId } });
+            } catch (err: any) {
+              cleanupErrors.push(`Failed to delete attachment record ${attId}: ${err.message}`);
+              uncleanedResources.push(`Attachment DB record (ID: ${attId})`);
+            }
           }
-        } catch {}
+        } catch (err: any) {
+          cleanupErrors.push(`Failed to process attachment ${attId}: ${err.message}`);
+        }
       }
+    } catch (err: any) {
+      cleanupErrors.push(`Fatal error in teardown execution: ${err.message}`);
+    } finally {
+      if (prisma) {
+        await prisma.$disconnect().catch(() => {});
+      }
+    }
 
-      await prisma.$disconnect();
-    } catch (err) {
-      console.warn("[E2E CLEANUP] Teardown error:", err);
+    if (cleanupErrors.length > 0 || uncleanedResources.length > 0) {
+      const details = [
+        `[E2E CLEANUP FAILED] Encountered ${cleanupErrors.length} error(s) during teardown:`,
+        ...cleanupErrors.map((e, idx) => `  ${idx + 1}. ${e}`),
+        ...(uncleanedResources.length > 0
+          ? [`Uncleaned resources:`, ...uncleanedResources.map((r) => `  - ${r}`)]
+          : []),
+      ].join("\n");
+      throw new Error(details);
     }
   });
 
@@ -111,7 +212,14 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
     // 7. Submit ticket - intercept network responses to track IDs immediately
     const submitBtn = page.getByRole("button", { name: /submit ticket/i });
     const ticketPromise = page.waitForResponse(
-      (resp) => resp.url().includes("/api/tickets") && resp.request().method() === "POST",
+      (resp) => {
+        try {
+          const parsedUrl = new URL(resp.url());
+          return parsedUrl.pathname === "/api/tickets" && resp.request().method() === "POST";
+        } catch {
+          return false;
+        }
+      },
       { timeout: 15000 }
     ).catch(() => null);
 
@@ -123,7 +231,9 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
         const body = await ticketResp.json();
         if (body.id) {
           createdTicketId = String(body.id);
-          createdTicketIds.push(body.id);
+          if (!createdTicketIds.includes(body.id)) {
+            createdTicketIds.push(body.id);
+          }
         }
         if (body.ticketNumber) {
           createdTicketNumber = body.ticketNumber;
