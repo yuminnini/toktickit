@@ -83,6 +83,6 @@
   - `server` baseline suite: 12 test files, 88 passed (exit code 0).
   - `client` baseline suite: 10 test files, 53 passed (exit code 0).
   - `playwright` E2E suite: 2 test files, 4 passed (exit code 0, duration 19.1s).
-- **Exit Gate Status**: In progress — P02 (Peer review Round 5 changes implemented & verified, real ResponseRegistrationTracker regression tests added, full suites 88/53/4 passed, awaiting reviewer re-inspection).
+- **Exit Gate Status**: Completed / Passed — Phase F1 (P00–P02 Baseline, Contracts & Harness Isolation) approved by peer reviewer; PR #38 merged into `lab3-staging` at commit `33624d0`.
 
 
