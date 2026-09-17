@@ -9,6 +9,7 @@ import {
   TestHarnessRegistry,
   ensureTestHarnessReady,
   assertCleanupSucceeded,
+  ResponseRegistrationTracker,
 } from "../../src/harness-guard.js";
 
 describe("HARNESS-01: Test Harness Isolation Guard", () => {
@@ -231,21 +232,18 @@ describe("HARNESS-01: Test Harness Isolation Guard", () => {
       expect(() => assertCleanupSucceeded(result)).toThrow(/\[HARNESS-01 CLEANUP FAILED\]/);
     });
 
-    it("regression: captures asynchronous response IDs even when subsequent UI click action throws", async () => {
-      const trackedIds: number[] = [];
-      const pending: Promise<void>[] = [];
-
-      // Simulated network listener pattern used in E2E
-      const simulateIncomingResponse = (id: number) => {
-        const p = Promise.resolve().then(() => {
-          trackedIds.push(id);
-        });
-        pending.push(p);
+    it("regression: ResponseRegistrationTracker captures response IDs even when subsequent UI click action throws", async () => {
+      const tracker = new ResponseRegistrationTracker();
+      const mockResponse = {
+        url: () => "http://localhost:3103/api/tickets",
+        request: () => ({ method: () => "POST" }),
+        ok: () => true,
+        json: async () => ({ id: 999, ticketNumber: "TKT-2026-000999" }),
       };
 
-      // Simulated user action that fails after response is dispatched by backend
+      // Simulated user action that dispatches response via network listener but then throws in UI
       const failedUserAction = async () => {
-        simulateIncomingResponse(999);
+        tracker.handleResponse(mockResponse);
         throw new Error("Simulated click timeout / element detached error");
       };
 
@@ -253,10 +251,42 @@ describe("HARNESS-01: Test Harness Isolation Guard", () => {
       await expect(failedUserAction()).rejects.toThrow("Simulated click timeout / element detached error");
 
       // Teardown awaits pending response registrations
-      await Promise.allSettled(pending);
+      await tracker.waitForRegistrations();
 
-      // Verify ID was reliably captured despite the thrown error
-      expect(trackedIds).toContain(999);
+      // Verify ID and ticket number were reliably captured despite the thrown error
+      expect(tracker.ticketIds).toContain(999);
+      expect(tracker.ticketNumbers).toContain("TKT-2026-000999");
+      expect(tracker.registrationErrors).toHaveLength(0);
+    });
+
+    it("regression: ResponseRegistrationTracker records registration errors when response.json() fails, failing teardown", async () => {
+      const tracker = new ResponseRegistrationTracker();
+      const mockFailedResponse = {
+        url: () => "http://localhost:3103/api/tickets",
+        request: () => ({ method: () => "POST" }),
+        ok: () => true,
+        json: async () => {
+          throw new Error("Target page, context or browser has been closed");
+        },
+      };
+
+      // Simulated network response whose body cannot be read because the page fixture was closed prematurely
+      tracker.handleResponse(mockFailedResponse);
+      await tracker.waitForRegistrations();
+
+      // Verify that ticket ID could not be parsed, but the error is recorded in registrationErrors
+      expect(tracker.ticketIds).toHaveLength(0);
+      expect(tracker.registrationErrors.length).toBe(1);
+      expect(tracker.registrationErrors[0]).toContain("Target page, context or browser has been closed");
+
+      // Teardown inspects registrationErrors and must throw to prevent silent orphan tickets
+      const assertTeardownSucceeded = () => {
+        const cleanupErrors = [...tracker.registrationErrors];
+        if (cleanupErrors.length > 0) {
+          throw new Error(`[E2E CLEANUP FAILED] ${cleanupErrors.join("; ")}`);
+        }
+      };
+      expect(assertTeardownSucceeded).toThrow(/\[E2E CLEANUP FAILED\].*Target page, context or browser has been closed/);
     });
   });
 

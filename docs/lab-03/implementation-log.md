@@ -64,10 +64,25 @@
        - Asynchronous response listener captures created IDs even if subsequent UI action throws.
   - Fixes verification:
     - Checked `afterAll` in both specs; confirmed safe idempotent deletion (`findUnique` prior to `delete`) and strict URL pathname matching prevents attachment POSTs from being mistaken for tickets.
+- **Peer Review Iteration 5**:
+  - Reviewer feedback:
+    1. `[P2]` Reading response body failed and swallowed error: `requester-ticket-flow.spec.ts` (lines 40 & 52) used `catch {}`. If `response.json()` failed (e.g. page/context closed while reading body), no ID was recorded and teardown reported success without cleaning tickets or reporting errors.
+    2. Must collect ID registration errors and report them as teardown failures.
+    3. Must await registration in `afterEach` before the page fixture is closed.
+    4. Must add regression tests invoking the actual listener/helper (not a hand-rolled `trackedIds.push()` mock).
+    5. Status remains: `In progress — P02`.
+  - Fixes applied:
+    1. Extracted `ResponseRegistrationTracker` class into `server/src/harness-guard.ts` to manage network response registration and track all body parsing errors into `registrationErrors`.
+    2. Integrated `ResponseRegistrationTracker` in `e2e/lab-02/requester-ticket-flow.spec.ts`.
+    3. Added `test.afterEach` in `requester-ticket-flow.spec.ts` awaiting `responseTracker.waitForRegistrations()` before the Playwright `page` fixture is torn down.
+    4. Updated teardown (`test.afterAll`) to initialize `cleanupErrors` with `...responseTracker.registrationErrors`, ensuring that if response body reading fails, teardown throws and fails the test run with detailed diagnostics.
+    5. Added regression test in `server/tests/lab-03/harness.unit.test.ts` exercising the real `ResponseRegistrationTracker` with simulated `response.json()` failure (page closed error), verifying that errors are captured and teardown fails.
+    6. Guarded category and system select dropdowns in `requester-ticket-flow.spec.ts` to await `not.toBeDisabled()` before selecting options.
 - **Test Results (Post-Fixes)**:
-  - `server/tests/lab-03/harness.unit.test.ts`: 27 passed (exit code 0).
-  - `server` baseline suite: 12 test files, 87 passed (exit code 0).
+  - `server/tests/lab-03/harness.unit.test.ts`: 28 passed (exit code 0).
+  - `server` baseline suite: 12 test files, 88 passed (exit code 0).
   - `client` baseline suite: 10 test files, 53 passed (exit code 0).
-  - `playwright` E2E suite: 2 test files, 4 passed (exit code 0, duration 15.8s).
-- **Exit Gate Status**: In progress — P02 (Peer review Round 4 changes implemented & verified, 2 regression tests added, full suites 87/53/4 passed, awaiting reviewer re-inspection).
+  - `playwright` E2E suite: 2 test files, 4 passed (exit code 0, duration 19.1s).
+- **Exit Gate Status**: In progress — P02 (Peer review Round 5 changes implemented & verified, real ResponseRegistrationTracker regression tests added, full suites 88/53/4 passed, awaiting reviewer re-inspection).
+
 

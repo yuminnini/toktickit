@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { getPrisma } from "../../server/src/prisma.js";
+import { ResponseRegistrationTracker } from "../../server/src/harness-guard.js";
 
 const API_PORT = process.env.TEST_API_PORT || "3103";
 const API_BASE_URL = process.env.API_URL || `http://localhost:${API_PORT}`;
@@ -17,51 +18,27 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
   let createdAttachmentId = "";
   const createdTicketIds: number[] = [];
   const createdAttachmentIds: number[] = [];
-  const pendingRegistrations: Promise<void>[] = [];
+  const responseTracker = new ResponseRegistrationTracker();
 
   // Register created resource IDs asynchronously immediately upon response reception,
   // ensuring IDs are captured even if submitBtn.click() times out or throws.
   test.beforeEach(async ({ page }) => {
     page.on("response", (response) => {
-      try {
-        const parsedUrl = new URL(response.url());
-        const method = response.request().method();
-        if (parsedUrl.pathname === "/api/tickets" && method === "POST" && response.ok()) {
-          const registration = (async () => {
-            try {
-              const body = await response.json();
-              if (body.id && !createdTicketIds.includes(body.id)) {
-                createdTicketIds.push(body.id);
-                createdTicketId = String(body.id);
-              }
-              if (body.ticketNumber) {
-                createdTicketNumber = body.ticketNumber;
-              }
-            } catch {}
-          })();
-          pendingRegistrations.push(registration);
-        }
-        if (parsedUrl.pathname.includes("/attachments") && method === "POST" && response.ok()) {
-          const registration = (async () => {
-            try {
-              const body = await response.json();
-              if (body.id && !createdAttachmentIds.includes(body.id)) {
-                createdAttachmentIds.push(body.id);
-                createdAttachmentId = String(body.id);
-              }
-            } catch {}
-          })();
-          pendingRegistrations.push(registration);
-        }
-      } catch {}
+      responseTracker.handleResponse(response);
     });
+  });
+
+  // Ensure all pending response body parsing completes before Playwright closes the page fixture
+  test.afterEach(async () => {
+    await responseTracker.waitForRegistrations();
   });
 
   test.afterAll(async () => {
     // 1. Wait for all in-flight response ID registrations to resolve
-    await Promise.allSettled(pendingRegistrations);
+    await responseTracker.waitForRegistrations();
 
-    const cleanupErrors: string[] = [];
+    // Propagate any response registration/parsing errors so teardown fails explicitly
+    const cleanupErrors: string[] = [...responseTracker.registrationErrors];
     const uncleanedResources: string[] = [];
     let prisma: any = null;
 
@@ -70,16 +47,22 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
       const uploadDir = process.env.UPLOAD_DIR || "uploads_test";
 
       // 2. Discover and delete all tickets and associated attachments created during this test run
-      const ticketIdSet = new Set<number>(createdTicketIds);
-      if (createdTicketNumber) {
+      const ticketIdSet = new Set<number>([...createdTicketIds, ...responseTracker.ticketIds]);
+      const ticketNumbersToQuery = new Set<string>();
+      if (createdTicketNumber) ticketNumbersToQuery.add(createdTicketNumber);
+      for (const num of responseTracker.ticketNumbers) {
+        ticketNumbersToQuery.add(num);
+      }
+
+      for (const num of ticketNumbersToQuery) {
         try {
           const t = await prisma.ticket.findUnique({
-            where: { ticketNumber: createdTicketNumber },
+            where: { ticketNumber: num },
             select: { id: true },
           });
           if (t) ticketIdSet.add(t.id);
         } catch (err: any) {
-          cleanupErrors.push(`Failed to query ticket by number '${createdTicketNumber}': ${err.message}`);
+          cleanupErrors.push(`Failed to query ticket by number '${num}': ${err.message}`);
         }
       }
 
@@ -125,7 +108,8 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
       }
 
       // 3. Clean any remaining standalone attachment records and physical files
-      for (const attId of createdAttachmentIds) {
+      const attachmentIdSet = new Set<number>([...createdAttachmentIds, ...responseTracker.attachmentIds]);
+      for (const attId of attachmentIdSet) {
         try {
           const att = await prisma.attachment.findUnique({ where: { id: attId } });
           if (att) {
@@ -193,8 +177,13 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
     await expect(page).toHaveURL(/.*tickets\/new/);
 
     // 5. Fill Create Ticket form
-    await page.locator("#categoryId").selectOption({ label: "Hardware" });
-    await page.locator("#relatedSystemId").selectOption({ label: "Corporate Laptop" });
+    const categorySelect = page.locator("#categoryId");
+    await expect(categorySelect).not.toBeDisabled();
+    await categorySelect.selectOption({ label: "Hardware" });
+
+    const systemSelect = page.locator("#relatedSystemId");
+    await expect(systemSelect).not.toBeDisabled();
+    await systemSelect.selectOption({ label: "Corporate Laptop" });
     await page.locator("#summary").fill("E2E Test Laptop Screen Glitch");
     await page
       .locator("#description")
@@ -238,7 +227,11 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
         if (body.ticketNumber) {
           createdTicketNumber = body.ticketNumber;
         }
-      } catch {}
+      } catch (err: any) {
+        responseTracker.registrationErrors.push(
+          `Failed to parse ticket response in test body: ${err?.message || String(err)}`
+        );
+      }
     }
 
     // 8. Verify Success Screen appears with Ticket Number

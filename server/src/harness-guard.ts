@@ -349,6 +349,74 @@ export function assertCleanupSucceeded(result: {
   }
 }
 
+export interface HttpResponseLike {
+  url(): string;
+  request(): { method(): string };
+  ok(): boolean;
+  json(): Promise<any>;
+}
+
+/**
+ * Tracks network responses to register created ticket and attachment IDs
+ * for deterministic cleanup. Collects registration errors if body parsing
+ * fails (e.g. page/context closed or JSON parse error) to ensure teardown fails explicitly.
+ */
+export class ResponseRegistrationTracker {
+  public ticketIds: number[] = [];
+  public attachmentIds: number[] = [];
+  public ticketNumbers: string[] = [];
+  public registrationErrors: string[] = [];
+  public pendingRegistrations: Promise<void>[] = [];
+
+  handleResponse(response: HttpResponseLike): void {
+    try {
+      const parsedUrl = new URL(response.url());
+      const method = response.request().method();
+
+      if (parsedUrl.pathname === "/api/tickets" && method === "POST" && response.ok()) {
+        const registration = (async () => {
+          try {
+            const body = await response.json();
+            if (body?.id && !this.ticketIds.includes(body.id)) {
+              this.ticketIds.push(body.id);
+            }
+            if (body?.ticketNumber && !this.ticketNumbers.includes(body.ticketNumber)) {
+              this.ticketNumbers.push(body.ticketNumber);
+            }
+          } catch (err: any) {
+            this.registrationErrors.push(
+              `Failed to parse ticket creation response from ${response.url()}: ${err?.message || String(err)}`
+            );
+          }
+        })();
+        this.pendingRegistrations.push(registration);
+      } else if (parsedUrl.pathname.includes("/attachments") && method === "POST" && response.ok()) {
+        const registration = (async () => {
+          try {
+            const body = await response.json();
+            if (body?.id && !this.attachmentIds.includes(body.id)) {
+              this.attachmentIds.push(body.id);
+            }
+          } catch (err: any) {
+            this.registrationErrors.push(
+              `Failed to parse attachment upload response from ${response.url()}: ${err?.message || String(err)}`
+            );
+          }
+        })();
+        this.pendingRegistrations.push(registration);
+      }
+    } catch (err: any) {
+      this.registrationErrors.push(
+        `Failed to process response URL '${response.url()}': ${err?.message || String(err)}`
+      );
+    }
+  }
+
+  async waitForRegistrations(): Promise<void> {
+    await Promise.allSettled(this.pendingRegistrations);
+  }
+}
+
 /**
  * Pre-flight guard ensuring the test harness is properly isolated before any test suite runs.
  */
