@@ -15,6 +15,8 @@ import {
   validateFileContent,
 } from "./services/attachmentStorage.js";
 import { authRouter } from "./routes/auth.js";
+import { staffRouter } from "./routes/staff.js";
+import { communicationsRouter } from "./routes/communications.js";
 import {
   authenticateSession,
   requireAuth,
@@ -77,6 +79,12 @@ app.use(verifyCsrf);
 
 // Auth Routes
 app.use("/api/auth", authRouter);
+
+// Staff Routes
+app.use("/api/staff", staffRouter);
+
+// Communications Routes (comments, internal notes, appears-resolved)
+app.use("/api/tickets", communicationsRouter);
 
 // Health Check
 app.get("/api/health", (_req: Request, res: Response) => {
@@ -789,96 +797,6 @@ app.delete(
         error: "INTERNAL_ERROR",
         message: "Unable to remove attachment",
       });
-    }
-  }
-);
-
-// Internal Notes (Staff/Admin read, Staff create, 403 for Requester with zero leakage)
-app.get(
-  "/api/tickets/:id/internal-notes",
-  requireAuth,
-  requirePasswordChanged,
-  async (req: Request, res: Response) => {
-    try {
-      if (req.user!.role === "REQUESTER") {
-        return res.status(403).json({ error: "FORBIDDEN", message: "Access denied" });
-      }
-
-      const ticketId = Number(req.params.id);
-      if (!Number.isInteger(ticketId)) {
-        return res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
-      }
-
-      const prisma = getPrisma();
-      const notes = await prisma.internalNote.findMany({
-        where: { ticketId },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        include: {
-          author: { select: { id: true, name: true, role: true } },
-        },
-      });
-
-      const data = notes.map((n) => ({
-        id: n.id,
-        ticketId: n.ticketId,
-        content: n.content,
-        author: n.author,
-        createdAt: n.createdAt.toISOString(),
-      }));
-
-      return res.status(200).json({ data });
-    } catch {
-      return res.status(500).json({ error: "INTERNAL_ERROR", message: "Unable to load internal notes" });
-    }
-  }
-);
-
-app.post(
-  "/api/tickets/:id/internal-notes",
-  requireAuth,
-  requirePasswordChanged,
-  requireRole("IT_STAFF"),
-  async (req: Request, res: Response) => {
-    try {
-      const ticketId = Number(req.params.id);
-      if (!Number.isInteger(ticketId)) {
-        return res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
-      }
-
-      const { content } = req.body || {};
-      if (!content || typeof content !== "string" || content.trim().length < 1 || content.trim().length > 2000) {
-        return res.status(400).json({
-          error: "VALIDATION_ERROR",
-          message: "Content must be between 1 and 2000 characters",
-        });
-      }
-
-      const prisma = getPrisma();
-      const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
-      if (!ticket) {
-        return res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
-      }
-
-      const note = await prisma.internalNote.create({
-        data: {
-          ticketId,
-          authorId: req.user!.id,
-          content: content.trim(),
-        },
-        include: {
-          author: { select: { id: true, name: true, role: true } },
-        },
-      });
-
-      return res.status(201).json({
-        id: note.id,
-        ticketId: note.ticketId,
-        content: note.content,
-        author: note.author,
-        createdAt: note.createdAt.toISOString(),
-      });
-    } catch {
-      return res.status(500).json({ error: "INTERNAL_ERROR", message: "Unable to create internal note" });
     }
   }
 );

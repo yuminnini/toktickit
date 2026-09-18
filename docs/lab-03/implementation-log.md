@@ -153,3 +153,48 @@
   - `server build` (`tsc`): 0 errors, build clean.
   - `client build` (`tsc && vite build`): 0 errors, build clean.
 - **Exit Gate Status**: Completed / Passed — Phase F2 (P03–P06) approved by peer reviewer; PR #42 merged into `lab3-staging` at commit `edd8b16`. Ready for Phase F3 (P07–P10).
+
+## 2026-09-18 — Phase F3 (P07–P10) Requester Regression, Staff Queue, Operations & Communications
+
+- **Date / Contributor / Model**: 2026-09-18 | yuminnini (b4ymin) | Antigravity (Gemini 3.8 Flash)
+- **Phase & Work Packages**: F3 (P07–P10: Requester Regression, Staff Queue, Operations & Communications) | Issue #43 | Branch: `codex/lab3-p07-p10-staff-workflow` | Base: `lab3-staging` (from `edd8b16`)
+- **Requirements & ACs**: AC-19–39 (T19–T39), BR-04, BR-06–09, BR-14, BR-16, MSG-01, QUEUE-UI, HARNESS-01
+- **Implementations**:
+  - **P07 (Requester Regression & Session Adaptation)**:
+    - Verified requester ticket creation (`POST /api/tickets`), listing (`GET /api/tickets`), and detail (`GET /api/tickets/:id`) derive `requesterId` strictly from authenticated session (`req.user.id`).
+    - Preserved all response DTO contracts: `ticketNumber` and `ticketNo` alias, `active` flags, and attachment metadata fields (`originalName`, `storedFilename`, `sizeBytes`, `uploadedAt`).
+    - Verified requester isolation with foreign resource 404 non-disclosure, removed-download 404, and repeat-removal 409.
+    - Verified test suite: `server/tests/lab-03/requester-regression.api.test.ts` (4/4 passed).
+  - **P08 (Staff Queue Backend & UI)**:
+    - Implemented `GET /api/staff/tickets` in `server/src/routes/staff.ts` supporting pagination (`page`, `pageSize` default 25, max 100), full-text search across `summary`, `description`, `ticketNumber`, requester name/email, and multi-field filtering (`status`, `itPriority`, `categoryId`, `unassignedOnly`, `assignedToMe`).
+    - Implemented `GET /api/staff/eligible-owners` returning active `IT_STAFF` users sorted by name.
+    - Built responsive frontend queue (`client/src/pages/StaffQueuePage.tsx`): desktop table, mobile card layout, loading skeleton, filter toolbar, pagination controls, search input with reset, and empty/no-results states.
+    - Added tests: `client/tests/lab-03/StaffTicketQueue.test.tsx` (5/5 passed) and `server/tests/lab-03/staff-queue.api.test.ts` (5/5 passed).
+  - **P09 (Staff Ticket Operations & Concurrency Control)**:
+    - Implemented `GET /api/staff/tickets/:id` returning ticket detail with requester profile and assigned staff info.
+    - Implemented `POST /api/staff/tickets/:id/claim`: allows active staff to claim unassigned ticket; rejects already-claimed tickets with 409 `TICKET_ALREADY_ASSIGNED`.
+    - Implemented `PATCH /api/staff/tickets/:id/owner`: allows reassigning ticket to active staff; rejects inactive/non-staff with 400.
+    - Implemented `PATCH /api/staff/tickets/:id/priority`: allows staff to set `itPriority`; strictly enforces `requestedPriority` immutability.
+    - Implemented `PATCH /api/staff/tickets/:id/status`: enforces exact 8-status transition matrix (`specification.md`), rejecting disallowed transitions with 400 `INVALID_STATUS_TRANSITION`.
+    - Implemented optimistic concurrency control across all mutations: requires `currentVersion` in body; rejects version mismatches with 409 `VERSION_CONFLICT` returning latest version and ticket state.
+    - Guaranteed all database mutations commit before sending HTTP responses.
+    - Built staff detail page (`client/src/pages/StaffTicketDetailPage.tsx`): operational action panel (Claim, Reassign, Change IT Priority, Update Status), transition modal, concurrency conflict banner, public comments feed, and internal notes feed.
+    - Verified test suite: `server/tests/lab-03/staff-ticket-detail.api.test.ts` (6/6 passed).
+  - **P10 (Communications, Internal Notes & Requester Indication)**:
+    - Implemented `POST /api/tickets/:id/appears-resolved` in `server/src/routes/communications.ts`: allows ticket requester to mark issue resolved without altering formal status; sets `appearsResolvedAt` and `appearsResolvedById`; idempotent on duplicate calls.
+    - Implemented `GET` and `POST /api/tickets/:id/comments`: public comments creatable by own requester and staff, readable by own requester, staff, and admin.
+    - Implemented `GET` and `POST /api/tickets/:id/internal-notes`: private internal notes creatable and readable only by staff and admin; completely hidden from requesters (returns 403 / 404).
+    - Enforced append-only communications: `PUT`, `PATCH`, `DELETE` return 405 `METHOD_NOT_ALLOWED` with `Allow: GET, POST` header.
+    - Content validation and sanitization: 1–2000 characters, trimmed, rejects spoofed author or timestamps, safely displayed as raw text without execution.
+    - Integrated `PublicCommentsSection.tsx` and `InternalNotesSection.tsx` into client pages, and added "Problem Appears Resolved" banner and modal in `TicketDetail.tsx`.
+    - Created test suite: `server/tests/lab-03/comments-notes.api.test.ts` (5/5 passed).
+  - **End-to-End Flow (T39 / AC-39)**:
+    - Created `e2e/lab-03/staff-ticket-flow.spec.ts` executing complete staff flow: login -> triage queue -> search & filter -> claim ticket -> set IT priority -> post public comment & internal note -> transition status to IN_PROGRESS and RESOLVED.
+- **Test Results**:
+  - `server`: 21 test files passed, 141 tests passed (0 failures, 100% pass rate).
+  - `client`: 13 test files passed, 70 tests passed (0 failures, 100% pass rate).
+  - `playwright`: 3 test files passed, 5 tests passed (0 failures, 100% pass rate).
+  - `server build` (`tsc`): 0 errors, build clean.
+  - `client build` (`tsc && vite build`): 0 errors, build clean.
+- **Exit Gate Status**: Phase F3 (P07–P10) implementation completed and fully verified against contracts. Ready for pull request submission and peer review.
+

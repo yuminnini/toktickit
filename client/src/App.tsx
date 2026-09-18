@@ -7,6 +7,8 @@ import AppShell from "./components/AppShell";
 import MyTickets from "./pages/MyTickets";
 import CreateTicket from "./pages/CreateTicket";
 import TicketDetail from "./pages/TicketDetail";
+import StaffQueuePage from "./pages/StaffQueuePage";
+import StaffTicketDetailPage from "./pages/StaffTicketDetailPage";
 import CheckSystem from "./pages/CheckSystem";
 import { useAuth } from "./context/AuthContext";
 
@@ -28,15 +30,6 @@ function RoleRedirect() {
     return <Navigate to="/admin/users" replace />;
   }
   return <Navigate to="/my-tickets" replace />;
-}
-
-function StaffQueuePlaceholder() {
-  return (
-    <div className="card shadow-sm p-4 border-0" style={{ backgroundColor: "var(--color-surface)" }}>
-      <h1 className="h4 fw-bold mb-2">Staff Ticket Queue</h1>
-      <p className="text-muted">Staff ticket operations (scheduled for Phase F3).</p>
-    </div>
-  );
 }
 
 function AdminUsersPlaceholder() {
@@ -68,11 +61,26 @@ export default function App() {
         <Route element={<RouteGuard />}>
           <Route element={<AppShell />}>
             <Route path="/" element={<RoleRedirect />} />
-            <Route path="/my-tickets" element={<MyTickets />} />
-            <Route path="/tickets/new" element={<CreateTicket />} />
+
+            {/* Requester Routes */}
+            <Route element={<RouteGuard allowedRoles={["REQUESTER"]} />}>
+              <Route path="/my-tickets" element={<MyTickets />} />
+              <Route path="/tickets/new" element={<CreateTicket />} />
+            </Route>
+
+            {/* Shared / General Ticket Detail */}
             <Route path="/tickets/:id" element={<TicketDetail />} />
-            <Route path="/staff/tickets" element={<StaffQueuePlaceholder />} />
-            <Route path="/admin/users" element={<AdminUsersPlaceholder />} />
+
+            {/* IT Staff Routes */}
+            <Route element={<RouteGuard allowedRoles={["IT_STAFF"]} />}>
+              <Route path="/staff/tickets" element={<StaffQueuePage />} />
+              <Route path="/staff/tickets/:id" element={<StaffTicketDetailPage />} />
+            </Route>
+
+            {/* Administrator Routes */}
+            <Route element={<RouteGuard allowedRoles={["ADMINISTRATOR"]} />}>
+              <Route path="/admin/users" element={<AdminUsersPlaceholder />} />
+            </Route>
           </Route>
         </Route>
 
