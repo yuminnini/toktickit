@@ -17,6 +17,8 @@ import {
   revokeSessionByHash,
   revokeAllUserSessions,
   toSafeUser,
+  SESSION_COOKIE_NAME,
+  hashSessionToken,
 } from "../services/session.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -264,6 +266,12 @@ authRouter.post("/logout", async (req: Request, res: Response) => {
   try {
     if (req.session) {
       await revokeSessionByHash(req.session.tokenHash);
+    } else {
+      const rawToken = req.cookies?.[SESSION_COOKIE_NAME];
+      if (rawToken && typeof rawToken === "string") {
+        const tokenHash = hashSessionToken(rawToken);
+        await revokeSessionByHash(tokenHash);
+      }
     }
     clearSessionCookie(res);
     return res.status(204).end();

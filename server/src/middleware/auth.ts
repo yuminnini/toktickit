@@ -27,7 +27,7 @@ declare global {
  * Middleware that extracts session cookie, checks validity, expiration,
  * and user status. Attaches `req.user` and `req.session` if valid.
  */
-export async function authenticateSession(req: Request, _res: Response, next: NextFunction) {
+export async function authenticateSession(req: Request, res: Response, next: NextFunction) {
   const rawToken = req.cookies?.[SESSION_COOKIE_NAME];
   if (!rawToken || typeof rawToken !== "string") {
     return next();
@@ -75,7 +75,10 @@ export async function authenticateSession(req: Request, _res: Response, next: Ne
     return next();
   } catch (err) {
     console.error("Session authentication error:", err);
-    return next();
+    return res.status(500).json({
+      error: "INTERNAL_ERROR",
+      message: "An unexpected error occurred during session lookup",
+    });
   }
 }
 

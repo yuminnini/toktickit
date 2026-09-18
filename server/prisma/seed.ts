@@ -19,7 +19,7 @@ interface SeedUser {
   mustChangePassword?: boolean;
 }
 
-const USERS: SeedUser[] = [
+export const USERS: SeedUser[] = [
   // Administrators (>= 1 active)
   { name: "System Administrator", email: "admin@example.com", role: "ADMINISTRATOR", active: true, mustChangePassword: true },
 
@@ -30,9 +30,9 @@ const USERS: SeedUser[] = [
   { name: "Dana Former Staff", email: "staff.dana@example.com", role: "IT_STAFF", active: false, mustChangePassword: true },
 
   // Requesters (>= 4 active, >= 1 inactive)
-  // Jennifer & Michael have mustChangePassword: false for seamless test & E2E flows
-  { name: "Jennifer Anderson", email: "jennifer.anderson@example.com", role: "REQUESTER", active: true, mustChangePassword: false },
-  { name: "Michael Brown", email: "michael.brown@example.com", role: "REQUESTER", active: true, mustChangePassword: false },
+  // All newly provisioned users require password change on first login per spec
+  { name: "Jennifer Anderson", email: "jennifer.anderson@example.com", role: "REQUESTER", active: true, mustChangePassword: true },
+  { name: "Michael Brown", email: "michael.brown@example.com", role: "REQUESTER", active: true, mustChangePassword: true },
   { name: "Sarah Johnson", email: "sarah.johnson@example.com", role: "REQUESTER", active: true, mustChangePassword: true },
   { name: "David Lee", email: "david.lee@example.com", role: "REQUESTER", active: true, mustChangePassword: true },
   { name: "Robert Wilson", email: "robert.wilson@example.com", role: "REQUESTER", active: false, mustChangePassword: true },

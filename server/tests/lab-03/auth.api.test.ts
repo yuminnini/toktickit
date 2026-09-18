@@ -192,6 +192,39 @@ describe("P04: Authentication Backend API & Session Lifecycle", () => {
         (prisma.session as any).delete = origDelete;
       }
     });
+
+    it("Round 2 Point 2: returns 500 when database failure occurs during session lookup (authenticateSession)", async () => {
+      const loginRes = await request(app)
+        .post("/api/auth/login")
+        .set("Origin", allowedOrigin)
+        .send({ email: testEmail, password: validPassword });
+
+      const cookie = loginRes.headers["set-cookie"]![0];
+
+      const origFindUnique = (prisma.session as any).findUnique;
+      (prisma.session as any).findUnique = async () => {
+        throw new Error("Simulated database connection loss during session lookup");
+      };
+
+      try {
+        const logoutRes = await request(app)
+          .post("/api/auth/logout")
+          .set("Origin", allowedOrigin)
+          .set("Cookie", cookie);
+
+        expect(logoutRes.status).toBe(500);
+        expect(logoutRes.body.error).toBe("INTERNAL_ERROR");
+
+        const meRes = await request(app)
+          .get("/api/auth/me")
+          .set("Cookie", cookie);
+
+        expect(meRes.status).toBe(500);
+        expect(meRes.body.error).toBe("INTERNAL_ERROR");
+      } finally {
+        (prisma.session as any).findUnique = origFindUnique;
+      }
+    });
   });
 
   describe("T09 / AC-09: Login Rate Limiting", () => {

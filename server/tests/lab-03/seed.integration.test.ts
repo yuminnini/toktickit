@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { getPrisma } from "../../src/prisma.js";
-import { seedDatabase } from "../../prisma/seed.js";
+import { seedDatabase, USERS } from "../../prisma/seed.js";
 
 describe("T18 / AC-18: Seed Data Coverage", () => {
   it("seeds at least 4 active and 1 inactive Requester, 3 active and 1 inactive Staff, 1 Admin, and 24 tickets spanning all 8 statuses", async () => {
@@ -170,5 +170,17 @@ describe("T18 / AC-18: Seed Data Coverage", () => {
 
     // Clean up test user
     await prisma.user.delete({ where: { email: legacyEmail } });
+  });
+
+  it("Round 2 Point 1: main seed mandates mustChangePassword: true for all newly provisioned accounts including Jennifer and Michael", async () => {
+    // 1. Verify seed definition configures mustChangePassword: true for all users
+    for (const u of USERS) {
+      expect(u.mustChangePassword, `Expected user ${u.email} to have mustChangePassword: true in main seed`).toBe(true);
+    }
+
+    const jenniferDef = USERS.find((u) => u.email === "jennifer.anderson@example.com");
+    const michaelDef = USERS.find((u) => u.email === "michael.brown@example.com");
+    expect(jenniferDef?.mustChangePassword).toBe(true);
+    expect(michaelDef?.mustChangePassword).toBe(true);
   });
 });

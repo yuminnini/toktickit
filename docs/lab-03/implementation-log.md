@@ -140,7 +140,16 @@
   - `playwright`: 4 E2E tests passed (15.3s, 0 failures, 100% pass rate).
   - `server build` (`tsc`): 0 errors, build clean.
   - `client build` (`tsc && vite build`): 0 errors, build clean.
-- **Status**: Round 1 feedback fully resolved, tested, and ready for peer review re-check.
+- **Status**: Round 1 feedback fully resolved and tested.
 
-
-
+### 2026-09-18 (Night): Phase F2 (P03–P06) Peer Review Round 2 Resolution
+- **Peer Review Feedback Addressed (2 items)**:
+  1. `[P2 Fixed]` **Main Seed Enforces Forced Password Change**: Updated `server/prisma/seed.ts` so that all seed accounts (`USERS`), including Jennifer Anderson and Michael Brown, have `mustChangePassword: true` per specification. Bypassing forced password change for automated browser flows is strictly isolated to E2E fixture preparation in `e2e/lab-02/requester-ticket-flow.spec.ts` (`test.beforeAll`). Added regression test in `server/tests/lab-03/seed.integration.test.ts`.
+  2. `[P2 Fixed]` **Differentiate Session Not Found from DB Read Failure**: Updated `server/src/middleware/auth.ts` (`authenticateSession`) so that database read or revocation errors in the catch block immediately return 500 `INTERNAL_ERROR` rather than swallowing the error and calling `next()`. This prevents `/api/auth/logout` from falsely returning 204 when the session was not revoked due to a database outage. Additionally hardened `/api/auth/logout` in `server/src/routes/auth.ts` to revoke tokens directly from session cookies when `req.session` is unpopulated, propagating DB errors as 500. Added regression test in `server/tests/lab-03/auth.api.test.ts`.
+- **Latest Real Verification Results**:
+  - `server`: 17 test files passed, 121 tests passed (0 failures, 100% pass rate).
+  - `client`: 12 test files passed, 65 tests passed (0 failures, 100% pass rate).
+  - `playwright`: 4 E2E tests passed (22.2s, 0 failures, 100% pass rate).
+  - `server build` (`tsc`): 0 errors, build clean.
+  - `client build` (`tsc && vite build`): 0 errors, build clean.
+- **Status**: Round 2 feedback fully resolved, all test suites passing, ready for reviewer merge of PR #42.
