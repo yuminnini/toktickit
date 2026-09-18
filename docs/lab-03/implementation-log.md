@@ -85,4 +85,45 @@
   - `playwright` E2E suite: 2 test files, 4 passed (exit code 0, duration 19.1s).
 - **Exit Gate Status**: Completed / Passed — Phase F1 (P00–P02 Baseline, Contracts & Harness Isolation) approved by peer reviewer; PR #38 merged into `lab3-staging` at commit `33624d0`.
 
+## 2026-09-18 — Phase F2 (P03–P06) Migration, Authentication, Authorization & Auth UI
+
+- **Date / Contributor / Model**: 2026-09-18 | yuminnini (b4ymin) | Antigravity (Gemini 3.8 Flash)
+- **Phase & Work Packages**: F2 (P03–P06) | Issue #41 | Branch: `codex/lab3-p03-p06-auth-roles` | Base: `lab3-staging`
+- **Requirements & ACs**: AC-01–02, AC-05–18, BR-01–03, BR-05, BR-10–13, HARNESS-01
+- **Implementations**:
+  - **P03 (Schema Migration & Idempotent Seed)**:
+    - Extended Prisma schema: `Role` enum (`REQUESTER`, `IT_STAFF`, `ADMINISTRATOR`), `TicketStatus` enum extensions (`WAITING_FOR_REQUESTER`, `REOPENED`, `CANCELLED`), `User @@map("RequesterUser")`, `Session`, `PublicComment`, `InternalNote`, ticket operational fields (`itPriority`, `ticketOwnerId`, `version`, `appearsResolvedAt`, `appearsResolvedById`).
+    - Deployed idempotent forward migration SQL with `IF NOT EXISTS` guards (`server/prisma/migrations/20260918000000_lab3_auth_roles_ticketing/migration.sql`).
+    - Implemented idempotent seed script (`server/prisma/seed.ts`) provisioning 4 active + 1 inactive requesters, 3 active + 1 inactive IT staff, 1 administrator, and 24 tickets across all 8 statuses/priorities with sample notes and comments.
+    - Added Prisma `$use` middleware and strongly typed `requesterUser` alias on `ExtendedPrismaClient` in `server/src/prisma.ts`.
+  - **P04 (Authentication Backend API)**:
+    - Password hashing service (`server/src/services/password.ts`) with Argon2id (`@node-rs/argon2`, memory: 19456 KiB, iterations: 2, parallelism: 1) and policy validation (12–128 characters, whitespace preserved, confirm check, new != old).
+    - Rolling window rate limiter (`server/src/services/rateLimiter.ts`) enforcing 5 failed attempts per 15-minute window per email+IP, triggering 429 with `Retry-After` on the 6th attempt.
+    - Stateful session service (`server/src/services/session.ts`) generating 32-byte crypto tokens, storing SHA-256 token hash in DB, 8-hour lifetime, CSRF token, and setting `toktickit_session` HttpOnly cookie.
+    - CSRF protection middleware (`server/src/middleware/csrf.ts`) verifying Origin on mutations and `X-CSRF-Token` header for active sessions.
+    - Auth routes (`server/src/routes/auth.ts`) mounted at `/api/auth` (`/login`, `/me`, `/csrf`, `/change-password`, `/logout`).
+  - **P05 (Server Authorization & Session Identity)**:
+    - Auth middleware (`server/src/middleware/auth.ts`): `authenticateSession`, `requireAuth`, `requirePasswordChanged` (enforces 403 `PASSWORD_CHANGE_REQUIRED`), `requireRole`.
+    - Decommissioned `/api/requesters` returning 404.
+    - Business routes updated in `server/src/app.ts` to derive identity strictly from session, ignoring spoofed `X-Requester-Id`.
+    - Foreign resource 404 non-disclosure and internal notes 403 isolation enforced.
+    - Adapted legacy test suites to authenticate via session cookies and send CSRF tokens on mutations.
+  - **P06 (Frontend Authentication UI & Route Guards)**:
+    - Created `client/src/context/AuthContext.tsx` managing `user`, `isLoading`, `login`, `logout`, `changePassword`, `refreshUser`, and clearing legacy `lab2-selected-requester` sessionStorage.
+    - Updated `client/src/api.ts` with `credentials: "include"`, CSRF token caching, and auth methods.
+    - Created `client/src/pages/LoginPage.tsx` with email/password inputs, reveal toggle, busy state, and 429 countdown.
+    - Created `client/src/pages/ChangePasswordPage.tsx` with policy validation, forced-change banner, and error feedback.
+    - Updated `client/src/components/AppShell.tsx` with user badge, role badge, logout button, and complete removal of development requester switcher.
+    - Created `client/src/components/RouteGuard.tsx` enforcing session, forced password change redirect, and RBAC.
+    - Updated `client/src/components/Badge.tsx` supporting new statuses and role badges.
+    - Updated `client/src/App.tsx` routing `/login`, `/change-password`, `RoleRedirect`, and route guards.
+    - Created comprehensive unit/component tests in `client/tests/lab-03/Login.test.tsx` (T12) and `client/tests/lab-03/AuthShell.test.tsx` (T13).
+- **Test Results**:
+  - `server`: 17 test files passed, 113 tests passed (0 failures, 100% pass rate).
+  - `client`: 12 test files passed, 65 tests passed (0 failures, 100% pass rate).
+  - `server build` (`tsc`): 0 errors, build clean.
+  - `client build` (`tsc && vite build`): 0 errors, build clean.
+- **Exit Gate Status**: Phase F2 (P03–P06) implementation completed and fully verified against contracts. Ready for peer review.
+
+
 

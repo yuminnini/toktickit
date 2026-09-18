@@ -12,6 +12,7 @@ import {
 } from "../../src/services/attachmentStorage.js";
 import { Priority, TicketStatus } from "@prisma/client";
 import { globalHarnessRegistry } from "../../src/harness-guard.js";
+import { getAuthSessionForUser } from "../helpers/auth.js";
 
 // Isolated temporary upload directory per test run (Peer review #7)
 const testUploadDir = fs.mkdtempSync(
@@ -52,6 +53,10 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
   let inactiveRequesterId: number;
   let categoryId: number;
   let systemId: number;
+  let sessionA: { cookie: string; csrfToken: string };
+  let sessionB: { cookie: string; csrfToken: string };
+  let inactiveSession: { cookie: string; csrfToken: string };
+  const allowedOrigin = "http://localhost:5173";
 
   const testTicketIds: number[] = [];
 
@@ -72,27 +77,37 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
       data: {
         name: "Attachment Tester A",
         email: `att-tester-a-${Date.now()}@example.com`,
+        role: "REQUESTER",
         active: true,
+        mustChangePassword: false,
       },
     });
     const userB = await prisma.requesterUser.create({
       data: {
         name: "Attachment Tester B",
         email: `att-tester-b-${Date.now()}@example.com`,
+        role: "REQUESTER",
         active: true,
+        mustChangePassword: false,
       },
     });
     const inactiveUser = await prisma.requesterUser.create({
       data: {
         name: "Attachment Inactive Tester",
         email: `att-inactive-${Date.now()}@example.com`,
+        role: "REQUESTER",
         active: false,
+        mustChangePassword: false,
       },
     });
 
     requesterAId = userA.id;
     requesterBId = userB.id;
     inactiveRequesterId = inactiveUser.id;
+
+    sessionA = await getAuthSessionForUser(requesterAId);
+    sessionB = await getAuthSessionForUser(requesterBId);
+    inactiveSession = await getAuthSessionForUser(inactiveRequesterId);
   });
 
   afterAll(async () => {
@@ -107,6 +122,11 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
         where: { id: { in: testTicketIds } },
       });
     }
+
+    // Clean up sessions before deleting users
+    await prisma.session.deleteMany({
+      where: { userId: { in: [requesterAId, requesterBId, inactiveRequesterId] } },
+    });
 
     // Clean up isolated test requesters
     await prisma.requesterUser.deleteMany({
@@ -176,7 +196,9 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .post(`/api/tickets/${ticket.id}/attachments`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .attach("file", oneMbBuffer, {
           filename: "screenshot.png",
           contentType: "image/png",
@@ -210,7 +232,9 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .post(`/api/tickets/${ticket.id}/attachments`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .attach("file", exact5MbBuffer, {
           filename: "exact5mb.pdf",
           contentType: "application/pdf",
@@ -226,7 +250,9 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .post(`/api/tickets/${ticket.id}/attachments`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .attach("file", over5MbBuffer, {
           filename: "overlimit.pdf",
           contentType: "application/pdf",
@@ -242,7 +268,9 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .post(`/api/tickets/${ticket.id}/attachments`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .attach("file", exeBuffer, {
           filename: "malware.exe",
           contentType: "application/x-msdownload",
@@ -258,7 +286,9 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .post(`/api/tickets/${ticket.id}/attachments`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .attach("file", textBuffer, {
           filename: "fake.png",
           contentType: "text/plain",
@@ -275,7 +305,9 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .post(`/api/tickets/${ticket.id}/attachments`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .attach("file", fakePngBuffer, {
           filename: "spoofed.png",
           contentType: "image/png",
@@ -293,7 +325,9 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .post(`/api/tickets/${ticket.id}/attachments`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .attach("file", webpBuffer, {
           filename: "photo.webp",
           contentType: "image/webp",
@@ -307,6 +341,9 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
       const ticket = await createTicket(requesterAId);
       const res = await request(app)
         .post(`/api/tickets/${ticket.id}/attachments`)
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .set("X-Requester-Id", String(requesterAId))
         .attach("file", createTestPng(), {
           filename: "header-upload.png",
@@ -322,7 +359,9 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .post(`/api/tickets/${ticket.id}/attachments`)
-        .query({ requesterId: requesterAId });
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken);
 
       expect(res.status).toBe(400);
       expect(res.body.error).toBe("NO_FILE");
@@ -334,7 +373,9 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .post(`/api/tickets/${ticketA.id}/attachments`)
-        .query({ requesterId: requesterBId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionB.cookie)
+        .set("X-CSRF-Token", sessionB.csrfToken)
         .attach("file", Buffer.from("test"), {
           filename: "test.jpg",
           contentType: "image/jpeg",
@@ -346,20 +387,22 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
       expect(fs.readdirSync(testUploadDir).length).toBe(filesBefore);
     });
 
-    it("pre-validation rejects inactive requester with 400 BAD_REQUESTER without disk write", async () => {
+    it("pre-validation rejects inactive requester with 401 UNAUTHENTICATED without disk write", async () => {
       const ticketA = await createTicket(requesterAId);
       const filesBefore = fs.readdirSync(testUploadDir).length;
 
       const res = await request(app)
         .post(`/api/tickets/${ticketA.id}/attachments`)
-        .query({ requesterId: inactiveRequesterId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", inactiveSession.cookie)
+        .set("X-CSRF-Token", inactiveSession.csrfToken)
         .attach("file", Buffer.from("test"), {
           filename: "test.jpg",
           contentType: "image/jpeg",
         });
 
-      expect(res.status).toBe(400);
-      expect(res.body.error).toBe("BAD_REQUESTER");
+      expect(res.status).toBe(401);
+      expect(res.body.error).toBe("UNAUTHENTICATED");
       expect(fs.readdirSync(testUploadDir).length).toBe(filesBefore);
     });
   });
@@ -376,7 +419,9 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
       // 6th upload should be rejected by pre-validation
       const res6 = await request(app)
         .post(`/api/tickets/${ticket.id}/attachments`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .attach("file", createTestPng("sixth"), {
           filename: "file6.png",
           contentType: "image/png",
@@ -398,14 +443,18 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
       const [res1, res2] = await Promise.all([
         request(app)
           .post(`/api/tickets/${ticket.id}/attachments`)
-          .query({ requesterId: requesterAId })
+          .set("Origin", allowedOrigin)
+          .set("Cookie", sessionA.cookie)
+          .set("X-CSRF-Token", sessionA.csrfToken)
           .attach("file", createTestPng("concurrent 1"), {
             filename: "concurrent1.png",
             contentType: "image/png",
           }),
         request(app)
           .post(`/api/tickets/${ticket.id}/attachments`)
-          .query({ requesterId: requesterAId })
+          .set("Origin", allowedOrigin)
+          .set("Cookie", sessionA.cookie)
+          .set("X-CSRF-Token", sessionA.csrfToken)
           .attach("file", createTestPng("concurrent 2"), {
             filename: "concurrent2.png",
             contentType: "image/png",
@@ -435,13 +484,17 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
       // Soft-remove the first attachment
       await request(app)
         .delete(`/api/attachments/${atts[0].id}`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .send({ reason: "Freeing quota for replacement" });
 
       // Active count is now 4; upload 5th active
       const res = await request(app)
         .post(`/api/tickets/${ticket.id}/attachments`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .attach("file", createTestPng("replacement"), {
           filename: "replacement.png",
           contentType: "image/png",
@@ -463,7 +516,9 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .delete(`/api/attachments/${att.id}`)
-        .query({ requesterId: requesterBId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionB.cookie)
+        .set("X-CSRF-Token", sessionB.csrfToken)
         .send({ reason: "Unauthorized attempt" });
 
       expect(res.status).toBe(404);
@@ -479,14 +534,18 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const resEmpty = await request(app)
         .delete(`/api/attachments/${att.id}`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .send({});
       expect(resEmpty.status).toBe(400);
       expect(resEmpty.body.error).toBe("REASON_REQUIRED");
 
       const resSpaces = await request(app)
         .delete(`/api/attachments/${att.id}`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .send({ reason: "    " });
       expect(resSpaces.status).toBe(400);
       expect(resSpaces.body.error).toBe("REASON_REQUIRED");
@@ -498,7 +557,9 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .delete(`/api/attachments/${att.id}`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .send({ reason: "A".repeat(501) });
 
       expect(res.status).toBe(400);
@@ -511,7 +572,9 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .delete(`/api/attachments/${att.id}`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .send({ reason: "Obsolete logs replaced with clean trace" });
 
       expect(res.status).toBe(200);
@@ -532,13 +595,17 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
       // First removal
       await request(app)
         .delete(`/api/attachments/${att.id}`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .send({ reason: "First remove" });
 
       // Second removal attempt
       const res2 = await request(app)
         .delete(`/api/attachments/${att.id}`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .send({ reason: "Second remove" });
 
       expect(res2.status).toBe(409);
@@ -553,7 +620,7 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .get(`/api/attachments/${att.id}`)
-        .query({ requesterId: requesterBId });
+        .set("Cookie", sessionB.cookie);
 
       expect(res.status).toBe(404);
       expect(res.body.error).toBe("NOT_FOUND");
@@ -565,7 +632,7 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .get(`/api/attachments/${att.id}`)
-        .query({ requesterId: requesterAId });
+        .set("Cookie", sessionA.cookie);
 
       expect(res.status).toBe(200);
       expect(res.body.id).toBe(att.id);
@@ -580,12 +647,14 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       await request(app)
         .delete(`/api/attachments/${att.id}`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .send({ reason: "Archived due to age" });
 
       const res = await request(app)
         .get(`/api/attachments/${att.id}`)
-        .query({ requesterId: requesterAId });
+        .set("Cookie", sessionA.cookie);
 
       expect(res.status).toBe(200);
       expect(res.body.id).toBe(att.id);
@@ -601,7 +670,7 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .get(`/api/attachments/${att.id}/download`)
-        .query({ requesterId: requesterBId });
+        .set("Cookie", sessionB.cookie);
 
       expect(res.status).toBe(404);
       expect(res.body.error).toBe("NOT_FOUND");
@@ -613,12 +682,14 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       await request(app)
         .delete(`/api/attachments/${att.id}`)
-        .query({ requesterId: requesterAId })
+        .set("Origin", allowedOrigin)
+        .set("Cookie", sessionA.cookie)
+        .set("X-CSRF-Token", sessionA.csrfToken)
         .send({ reason: "Removing file" });
 
       const res = await request(app)
         .get(`/api/attachments/${att.id}/download`)
-        .query({ requesterId: requesterAId });
+        .set("Cookie", sessionA.cookie);
 
       expect(res.status).toBe(404);
       expect(res.body.error).toBe("NOT_FOUND");
@@ -631,7 +702,7 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .get(`/api/attachments/${att.id}/download`)
-        .query({ requesterId: requesterAId });
+        .set("Cookie", sessionA.cookie);
 
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toBe("image/png");
@@ -657,7 +728,7 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .get(`/api/attachments/${maliciousAtt.id}/download`)
-        .query({ requesterId: requesterAId });
+        .set("Cookie", sessionA.cookie);
 
       expect(res.status).toBe(404);
       expect(res.body.error).toBe("NOT_FOUND");
@@ -678,7 +749,9 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
       try {
         const res = await request(app)
           .post(`/api/tickets/${ticket.id}/attachments`)
-          .query({ requesterId: requesterAId })
+          .set("Origin", allowedOrigin)
+          .set("Cookie", sessionA.cookie)
+          .set("X-CSRF-Token", sessionA.csrfToken)
           .attach("file", createTestPng("compensation test content"), {
             filename: "compensate.png",
             contentType: "image/png",
@@ -707,7 +780,7 @@ describe("Attachment Lifecycle API & Concurrency (API-07, API-08, API-09, API-10
 
       const res = await request(app)
         .get(`/api/attachments/${att.id}/download`)
-        .query({ requesterId: requesterAId });
+        .set("Cookie", sessionA.cookie);
 
       expect(res.status).toBe(404);
       expect(res.body.error).toBe("NOT_FOUND");
