@@ -25,6 +25,20 @@ import { verifyCsrf, isAllowedOrigin } from "./middleware/csrf.js";
 
 export const app = express();
 
+// Configure trusted proxies safely based on environment
+// Default to false or loopback so untrusted clients cannot spoof client IP via X-Forwarded-For
+const trustProxyEnv = process.env.TRUST_PROXY;
+if (trustProxyEnv) {
+  app.set(
+    "trust proxy",
+    trustProxyEnv === "true" ? true : trustProxyEnv === "false" ? false : trustProxyEnv
+  );
+} else if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", "loopback");
+} else {
+  app.set("trust proxy", false);
+}
+
 /**
  * Extract requesterId from header (X-Requester-Id), query, or body
  * Supports peer review contract compatibility

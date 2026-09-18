@@ -125,5 +125,22 @@
   - `client build` (`tsc && vite build`): 0 errors, build clean.
 - **Exit Gate Status**: Phase F2 (P03–P06) implementation completed and fully verified against contracts. Opened [PR #42](https://github.com/yuminnini/toktickit/pull/42) (`codex/lab3-p03-p06-auth-roles` → `lab3-staging`) for Issue #41. Ready for peer review.
 
+### 2026-09-18 (Evening): Phase F2 (P03–P06) Peer Review Round 1 Resolution
+- **Peer Review Feedback Addressed (7 items)**:
+  1. `[P1 Fixed]` **Seed Ticket Overwrite**: Isolated fixture ticket numbers into dedicated range `TKT-2026-900001`–`900024` and configured `update: {}` on upsert in `server/prisma/seed.ts` so re-seeding never overwrites existing tickets. Added integration test verifying non-overwrite.
+  2. `[P1 Fixed]` **Seed Account Status & Role Preservation**: Updated `seed.ts` to preserve existing user roles, active status, and names, filling in only missing credentials (`passwordHash`). Added integration test verifying account preservation.
+  3. `[P2 Fixed]` **Rate Limit Header Spoofing**: Configured safe `trust proxy` setting in `server/src/app.ts` and updated `getClientIp` in `server/src/routes/auth.ts` to use Express's validated `req.ip` rather than trusting unverified `X-Forwarded-For` headers. Added test verifying rotated `X-Forwarded-For` cannot bypass rate limiting.
+  4. `[P2 Fixed]` **Legacy Account Credential Provisioning**: Added routine in `seed.ts` to find and provision all users lacking credentials with initial password and `mustChangePassword: true`, ensuring zero orphaned unprovisioned accounts. Added integration test.
+  5. `[P2 Fixed]` **Atomic Password Change & Concurrency Control**: Wrapped password update, session revocation, and `createSession` inside a single Prisma `$transaction` in `server/src/routes/auth.ts`, supporting transaction client in `server/src/services/session.ts`. Added optimistic `sessionVersion` concurrency check returning 409 `CONCURRENT_MODIFICATION` on race condition.
+  6. `[P2 Fixed]` **Logout DB Error Propagation**: Modified `revokeSessionByHash` in `session.ts` to only ignore `P2025` (RecordNotFound) and rethrow any database connection/query failures. Updated `/api/auth/logout` to return 500 `INTERNAL_ERROR` upon failure. Added regression test.
+  7. `[P2 Fixed]` **E2E Test Authentication & Session Integration**: Updated `e2e/lab-02/requester-ticket-flow.spec.ts` to use real login (`/login`), real session cookies, CSRF tokens on mutating requests, verified ownership isolation 404, and verified logout flow. Added session authentication in `e2e/lab-02/responsive.spec.ts` and `{ credentials: "include" }` to `AttachmentSection.tsx` download fetch.
+- **Latest Real Verification Results**:
+  - `server`: 17 test files passed, 119 tests passed (0 failures, 100% pass rate).
+  - `client`: 12 test files passed, 65 tests passed (0 failures, 100% pass rate).
+  - `playwright`: 4 E2E tests passed (15.3s, 0 failures, 100% pass rate).
+  - `server build` (`tsc`): 0 errors, build clean.
+  - `client build` (`tsc && vite build`): 0 errors, build clean.
+- **Status**: Round 1 feedback fully resolved, tested, and ready for peer review re-check.
+
 
 

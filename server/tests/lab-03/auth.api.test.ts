@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, beforeAll } from "vitest";
+import { describe, it, expect, beforeEach, beforeAll, vi } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
@@ -160,6 +160,38 @@ describe("P04: Authentication Backend API & Session Lifecycle", () => {
 
       expect(meRes.status).toBe(401);
     });
+
+    it("Point 6: returns 500 when database failure occurs during session revocation", async () => {
+      const loginRes = await request(app)
+        .post("/api/auth/login")
+        .set("Origin", allowedOrigin)
+        .send({ email: testEmail, password: validPassword });
+
+      const cookie = loginRes.headers["set-cookie"]![0];
+
+      const csrfRes = await request(app)
+        .get("/api/auth/csrf")
+        .set("Cookie", cookie);
+      const csrfToken = csrfRes.body.csrfToken;
+
+      const origDelete = (prisma.session as any).delete;
+      (prisma.session as any).delete = async () => {
+        throw new Error("Simulated database connection loss");
+      };
+
+      try {
+        const logoutRes = await request(app)
+          .post("/api/auth/logout")
+          .set("Origin", allowedOrigin)
+          .set("X-CSRF-Token", csrfToken)
+          .set("Cookie", cookie);
+
+        expect(logoutRes.status).toBe(500);
+        expect(logoutRes.body.error).toBe("INTERNAL_ERROR");
+      } finally {
+        (prisma.session as any).delete = origDelete;
+      }
+    });
   });
 
   describe("T09 / AC-09: Login Rate Limiting", () => {
@@ -185,6 +217,30 @@ describe("P04: Authentication Backend API & Session Lifecycle", () => {
       expect(blockedRes.body.error).toBe("TOO_MANY_ATTEMPTS");
       expect(blockedRes.headers["retry-after"]).toBeDefined();
       expect(parseInt(blockedRes.headers["retry-after"])).toBeGreaterThan(0);
+    });
+
+    it("Point 3: cannot bypass rate limiting by rotating X-Forwarded-For headers", async () => {
+      const targetEmail = `rate-limit-spoof-${Date.now()}@example.com`;
+
+      // 5 failed attempts with different spoofed X-Forwarded-For headers
+      for (let i = 0; i < 5; i++) {
+        const res = await request(app)
+          .post("/api/auth/login")
+          .set("Origin", allowedOrigin)
+          .set("X-Forwarded-For", `203.0.113.${i + 1}`)
+          .send({ email: targetEmail, password: "WrongPassword123!" });
+        expect(res.status).toBe(401);
+      }
+
+      // 6th attempt with another spoofed IP must still be blocked with 429
+      const blockedRes = await request(app)
+        .post("/api/auth/login")
+        .set("Origin", allowedOrigin)
+        .set("X-Forwarded-For", "198.51.100.99")
+        .send({ email: targetEmail, password: "WrongPassword123!" });
+
+      expect(blockedRes.status).toBe(429);
+      expect(blockedRes.body.error).toBe("TOO_MANY_ATTEMPTS");
     });
   });
 
@@ -295,6 +351,62 @@ describe("P04: Authentication Backend API & Session Lifecycle", () => {
         .set("Cookie", newCookie);
       expect(newSessionRes.status).toBe(200);
       expect(newSessionRes.body.user.mustChangePassword).toBe(false);
+    });
+
+    it("Point 5: detects concurrent password change race and responds with 409 Conflict", async () => {
+      const email = `concurrent-pwd-${Date.now()}@example.com`;
+      const hash = await hashPassword(validPassword);
+      const user = await prisma.user.create({
+        data: {
+          name: "Concurrent Tester",
+          email,
+          role: "REQUESTER",
+          active: true,
+          passwordHash: hash,
+          mustChangePassword: true,
+          sessionVersion: 1,
+        },
+      });
+
+      const loginRes = await request(app)
+        .post("/api/auth/login")
+        .set("Origin", allowedOrigin)
+        .send({ email, password: validPassword });
+
+      const cookie = loginRes.headers["set-cookie"]![0];
+
+      const csrfRes = await request(app)
+        .get("/api/auth/csrf")
+        .set("Cookie", cookie);
+      const csrfToken = csrfRes.body.csrfToken;
+
+      const origTransaction = prisma.$transaction;
+      (prisma as any).$transaction = async (fn: any) => {
+        // Bump sessionVersion in DB right before transaction executes to simulate concurrent race
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { sessionVersion: 99 },
+        });
+        return origTransaction.call(prisma, fn);
+      };
+
+      try {
+        const changeRes = await request(app)
+          .post("/api/auth/change-password")
+          .set("Origin", allowedOrigin)
+          .set("X-CSRF-Token", csrfToken)
+          .set("Cookie", cookie)
+          .send({
+            currentPassword: validPassword,
+            newPassword: "NewValidPassword123!",
+            confirmPassword: "NewValidPassword123!",
+          });
+
+        expect(changeRes.status).toBe(409);
+        expect(changeRes.body.error).toBe("CONCURRENT_MODIFICATION");
+      } finally {
+        (prisma as any).$transaction = origTransaction;
+      }
     });
   });
 

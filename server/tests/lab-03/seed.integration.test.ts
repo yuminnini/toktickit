@@ -80,4 +80,95 @@ describe("T18 / AC-18: Seed Data Coverage", () => {
     expect(commentCount).toBeGreaterThan(0);
     expect(noteCount).toBeGreaterThan(0);
   });
+
+  it("Point 1: seedDatabase does not overwrite existing tickets upon re-seeding", async () => {
+    const prisma = getPrisma() as any;
+    await seedDatabase(prisma);
+
+    // Pick a seeded ticket and modify its fields
+    const testTicket = await prisma.ticket.findFirst({
+      where: { ticketNumber: "TKT-2026-900001" },
+    });
+    expect(testTicket).toBeTruthy();
+
+    const customSummary = "User Customized Issue Summary";
+    const customStatus = "IN_PROGRESS";
+    await prisma.ticket.update({
+      where: { id: testTicket.id },
+      data: {
+        summary: customSummary,
+        currentStatus: customStatus,
+      },
+    });
+
+    // Re-run seed
+    await seedDatabase(prisma);
+
+    // Verify ticket was NOT overwritten back to fictional template
+    const verifiedTicket = await prisma.ticket.findUnique({
+      where: { id: testTicket.id },
+    });
+    expect(verifiedTicket.summary).toBe(customSummary);
+    expect(verifiedTicket.currentStatus).toBe(customStatus);
+  });
+
+  it("Point 2: seedDatabase preserves deactivated account status and custom roles", async () => {
+    const prisma = getPrisma() as any;
+    await seedDatabase(prisma);
+
+    // Deactivate an active staff user and change role
+    const staffUser = await prisma.user.findUnique({
+      where: { email: "staff.bob@example.com" },
+    });
+    expect(staffUser).toBeTruthy();
+
+    await prisma.user.update({
+      where: { email: "staff.bob@example.com" },
+      data: {
+        active: false,
+        role: "ADMINISTRATOR",
+      },
+    });
+
+    // Re-run seed
+    await seedDatabase(prisma);
+
+    // Verify deactivated status and role were preserved (not reset to active / IT_STAFF)
+    const verifiedStaff = await prisma.user.findUnique({
+      where: { email: "staff.bob@example.com" },
+    });
+    expect(verifiedStaff.active).toBe(false);
+    expect(verifiedStaff.role).toBe("ADMINISTRATOR");
+  });
+
+  it("Point 4: seedDatabase provisions legacy accounts that lack password credentials", async () => {
+    const prisma = getPrisma() as any;
+
+    // Create a legacy user with null passwordHash
+    const legacyEmail = `legacy.user.${Date.now()}@example.com`;
+    await prisma.user.create({
+      data: {
+        name: "Legacy Requester",
+        email: legacyEmail,
+        role: "REQUESTER",
+        active: true,
+        passwordHash: null,
+      },
+    });
+
+    // Run seed with custom initial password
+    const customInitPass = "CustomInitPassword123!";
+    await seedDatabase(prisma, customInitPass);
+
+    // Verify legacy user now has valid password credentials and mustChangePassword === true
+    const provisionedUser = await prisma.user.findUnique({
+      where: { email: legacyEmail },
+    });
+    expect(provisionedUser.passwordHash).toBeTruthy();
+    expect(provisionedUser.passwordHash).toContain("$argon2id$");
+    expect(provisionedUser.mustChangePassword).toBe(true);
+
+    // Clean up test user
+    await prisma.user.delete({ where: { email: legacyEmail } });
+  });
 });

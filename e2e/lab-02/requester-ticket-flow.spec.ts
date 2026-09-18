@@ -20,6 +20,48 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
   const createdAttachmentIds: number[] = [];
   const responseTracker = new ResponseRegistrationTracker();
 
+  test.beforeAll(async () => {
+    const prisma = getPrisma();
+    const { hashPassword } = await import("../../server/src/services/password.js");
+    const testHash = await hashPassword("InitialPass123!");
+
+    await prisma.user.upsert({
+      where: { email: "jennifer.anderson@example.com" },
+      update: {
+        active: true,
+        passwordHash: testHash,
+        mustChangePassword: false,
+      },
+      create: {
+        name: "Jennifer Anderson",
+        email: "jennifer.anderson@example.com",
+        role: "REQUESTER",
+        active: true,
+        passwordHash: testHash,
+        mustChangePassword: false,
+        sessionVersion: 1,
+      },
+    });
+
+    await prisma.user.upsert({
+      where: { email: "michael.brown@example.com" },
+      update: {
+        active: true,
+        passwordHash: testHash,
+        mustChangePassword: false,
+      },
+      create: {
+        name: "Michael Brown",
+        email: "michael.brown@example.com",
+        role: "REQUESTER",
+        active: true,
+        passwordHash: testHash,
+        mustChangePassword: false,
+        sessionVersion: 1,
+      },
+    });
+  });
+
   // Register created resource IDs asynchronously immediately upon response reception,
   // ensuring IDs are captured even if submitBtn.click() times out or throws.
   test.beforeEach(async ({ page }) => {
@@ -156,18 +198,16 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
   test("E2E-01: Select Requester -> Create Ticket with attachment -> My Tickets -> Ticket Detail, Real Download & Soft Remove", async ({
     page,
   }) => {
-    // 1. Navigate to Requester Selection page
-    await page.goto("/requester-selection");
+    // 1. Navigate to Login page
+    await page.goto("/login");
     await expect(page).toHaveTitle(/TokTickIT/);
 
-    // 2. Select Requester A (Jennifer Anderson - ID: 1)
-    const requesterSelect = page.locator("#requester-select");
-    await expect(requesterSelect).toBeVisible();
-    await requesterSelect.selectOption({ label: "Jennifer Anderson" });
+    // 2. Log in as Requester A (Jennifer Anderson)
+    await page.locator("#email").fill("jennifer.anderson@example.com");
+    await page.locator("#password").fill("InitialPass123!");
+    await page.getByRole("button", { name: /sign in/i }).click();
 
-    // 3. Submit and arrive at My Tickets
-    const continueBtn = page.getByRole("button", { name: /continue/i });
-    await continueBtn.click();
+    // 3. Arrive at My Tickets
     await expect(page).toHaveURL(/.*my-tickets/);
     await expect(page.getByText("Jennifer Anderson")).toBeVisible();
 
@@ -328,26 +368,13 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
     expect(createdTicketId).not.toBe("");
     expect(createdAttachmentId).not.toBe("");
 
-    // 1. Start as Requester A (Jennifer Anderson)
-    await page.goto("/requester-selection");
-    const requesterSelect = page.locator("#requester-select");
-    await requesterSelect.selectOption({ label: "Jennifer Anderson" });
-    await page.getByRole("button", { name: /continue/i }).click();
+    // 1. Log in as Requester B (Michael Brown)
+    await page.goto("/login");
+    await page.locator("#email").fill("michael.brown@example.com");
+    await page.locator("#password").fill("InitialPass123!");
+    await page.getByRole("button", { name: /sign in/i }).click();
 
-    await expect(page).toHaveURL(/.*my-tickets/);
-    await expect(page.getByText("Jennifer Anderson")).toBeVisible();
-
-    // 2. Click "Change" requester in the navbar
-    const changeBtn = page.getByRole("button", { name: /change requester/i });
-    await changeBtn.click();
-    await expect(page).toHaveURL(/.*requester-selection/);
-
-    // 3. Select Requester B (Michael Brown - ID: 2)
-    await requesterSelect.selectOption({ label: "Michael Brown" });
-    const continueBtn = page.getByRole("button", { name: /continue/i });
-    await continueBtn.click();
-
-    // 4. Arrive at My Tickets as Michael Brown
+    // 2. Arrive at My Tickets as Michael Brown
     await expect(page).toHaveURL(/.*my-tickets/);
     await expect(page.getByText("Michael Brown")).toBeVisible();
 
@@ -362,32 +389,49 @@ test.describe("Requester Ticket Flow E2E (E2E-01, E2E-02, AC-01, AC-03, AC-10, A
     ).toBeVisible();
 
     // 7. Enforce multi-layered API ownership isolation (BR-10 non-disclosure rule & AC-03)
-    // Attempting to fetch Ticket A details as Requester B (ID: 2) returns 404
-    const ticketApiRes = await request.get(`${API_BASE_URL}/api/tickets/${createdTicketId}?requesterId=2`);
+    // Using page.request carries Requester B's authenticated session cookie
+    // Attempting to fetch Ticket A details as Requester B returns 404
+    const ticketApiRes = await page.request.get(`${API_BASE_URL}/api/tickets/${createdTicketId}`);
     expect(ticketApiRes.status()).toBe(404);
 
     // Attempting to fetch Ticket A attachment metadata as Requester B returns 404
-    const attMetaRes = await request.get(`${API_BASE_URL}/api/attachments/${createdAttachmentId}?requesterId=2`);
+    const attMetaRes = await page.request.get(`${API_BASE_URL}/api/attachments/${createdAttachmentId}`);
     expect(attMetaRes.status()).toBe(404);
 
     // Attempting to download Ticket A attachment as Requester B returns 404
-    const attDownloadRes = await request.get(
-      `${API_BASE_URL}/api/attachments/${createdAttachmentId}/download?requesterId=2`
+    const attDownloadRes = await page.request.get(
+      `${API_BASE_URL}/api/attachments/${createdAttachmentId}/download`
     );
     expect(attDownloadRes.status()).toBe(404);
 
+    // Fetch CSRF token for Requester B to perform mutating requests
+    const csrfRes = await page.request.get(`${API_BASE_URL}/api/auth/csrf`);
+    const csrfToken = (await csrfRes.json()).csrfToken;
+
     // Attempting to soft-remove Ticket A attachment as Requester B returns 404
-    const attDeleteRes = await request.delete(
-      `${API_BASE_URL}/api/attachments/${createdAttachmentId}?requesterId=2`,
-      { data: { reason: "Unauthorized delete attempt" } }
+    const clientPort = process.env.TEST_CLIENT_PORT || "5174";
+    const attDeleteRes = await page.request.delete(
+      `${API_BASE_URL}/api/attachments/${createdAttachmentId}`,
+      {
+        headers: {
+          "X-CSRF-Token": csrfToken,
+          Origin: `http://localhost:${clientPort}`,
+        },
+        data: { reason: "Unauthorized delete attempt" },
+      }
     );
     expect(attDeleteRes.status()).toBe(404);
 
     // Verify Requester B's ticket list API payload does not contain Ticket A
-    const listRes = await request.get(`${API_BASE_URL}/api/tickets?requesterId=2`);
+    const listRes = await page.request.get(`${API_BASE_URL}/api/tickets`);
     expect(listRes.status()).toBe(200);
     const listBody = await listRes.json();
     const containsTicketA = listBody.data?.some((t: any) => t.ticketNumber === createdTicketNumber);
     expect(containsTicketA).toBe(false);
+
+    // 8. Verify Logout flow
+    const logoutBtn = page.getByRole("button", { name: /logout/i });
+    await logoutBtn.click();
+    await expect(page).toHaveURL(/.*login/);
   });
 });

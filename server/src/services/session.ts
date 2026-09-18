@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { Response } from "express";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { getPrisma } from "../prisma.js";
 
 export const SESSION_COOKIE_NAME = "toktickit_session";
@@ -58,9 +59,14 @@ export function generateCsrfToken(): string {
 
 /**
  * Creates a new active session record in the database.
+ * Accepts an optional Prisma transaction client to support atomic operations.
  */
-export async function createSession(userId: number, sessionVersion: number) {
-  const prisma = getPrisma();
+export async function createSession(
+  userId: number,
+  sessionVersion: number,
+  client?: PrismaClient | Prisma.TransactionClient
+) {
+  const prisma = client || getPrisma();
   const rawToken = generateRawToken();
   const tokenHash = hashSessionToken(rawToken);
   const csrfToken = generateCsrfToken();
@@ -106,13 +112,18 @@ export function clearSessionCookie(res: Response) {
 
 /**
  * Deletes a session from the database by its token hash.
+ * Only tolerates record not found (P2025). Any database or connection error is rethrown.
  */
 export async function revokeSessionByHash(tokenHash: string) {
   const prisma = getPrisma();
   try {
     await prisma.session.delete({ where: { tokenHash } });
-  } catch {
-    // Already deleted or nonexistent
+  } catch (err: any) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
+      // Already deleted or nonexistent - safe to ignore
+      return;
+    }
+    throw err;
   }
 }
 

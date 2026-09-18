@@ -23,13 +23,11 @@ import { requireAuth } from "../middleware/auth.js";
 export const authRouter = Router();
 
 /**
- * Extracts client IP address safely.
+ * Extracts client IP address safely using Express's validated req.ip.
+ * Express determines req.ip based on configured trusted proxies, preventing
+ * clients from bypassing rate limiting by sending spoofed X-Forwarded-For headers.
  */
 function getClientIp(req: Request): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string") {
-    return forwarded.split(",")[0].trim();
-  }
   return req.ip || req.socket.remoteAddress || "127.0.0.1";
 }
 
@@ -201,31 +199,53 @@ authRouter.post("/change-password", requireAuth, async (req: Request, res: Respo
     const newHash = await hashPassword(newPassword);
     const newSessionVersion = currentUser.sessionVersion + 1;
 
-    // Atomically update user, invalidate all previous sessions, and create a new session
-    const [updatedUser, newSessionData] = await prisma.$transaction(async (tx) => {
-      // 1. Invalidate old sessions
-      await tx.session.deleteMany({ where: { userId: currentUser.id } });
+    try {
+      // Atomically update user, invalidate previous sessions, and create new session in a single transaction
+      const [updatedUser, newSession] = await prisma.$transaction(async (tx) => {
+        // 1. Optimistic concurrency check on user sessionVersion to prevent racing requests
+        const updateResult = await tx.user.updateMany({
+          where: {
+            id: currentUser.id,
+            sessionVersion: currentUser.sessionVersion,
+          },
+          data: {
+            passwordHash: newHash,
+            mustChangePassword: false,
+            sessionVersion: newSessionVersion,
+          },
+        });
 
-      // 2. Update user
-      const userUpdated = await tx.user.update({
-        where: { id: currentUser.id },
-        data: {
-          passwordHash: newHash,
-          mustChangePassword: false,
-          sessionVersion: newSessionVersion,
-        },
+        if (updateResult.count === 0) {
+          throw new Error("CONCURRENT_PASSWORD_CHANGE");
+        }
+
+        // 2. Invalidate old sessions
+        await tx.session.deleteMany({ where: { userId: currentUser.id } });
+
+        // 3. Create new session inside the SAME transaction
+        const sessionData = await createSession(currentUser.id, newSessionVersion, tx);
+
+        const refreshedUser = await tx.user.findUniqueOrThrow({
+          where: { id: currentUser.id },
+        });
+
+        return [refreshedUser, sessionData];
       });
 
-      return [userUpdated, null];
-    });
+      setSessionCookie(res, newSession.rawToken);
 
-    // Create new session for current user
-    const { rawToken } = await createSession(currentUser.id, newSessionVersion);
-    setSessionCookie(res, rawToken);
-
-    return res.status(200).json({
-      user: toSafeUser(updatedUser),
-    });
+      return res.status(200).json({
+        user: toSafeUser(updatedUser),
+      });
+    } catch (txErr: any) {
+      if (txErr?.message === "CONCURRENT_PASSWORD_CHANGE") {
+        return res.status(409).json({
+          error: "CONCURRENT_MODIFICATION",
+          message: "A concurrent password change request was detected. Please retry.",
+        });
+      }
+      throw txErr;
+    }
   } catch (err) {
     console.error("Change password error:", err);
     return res.status(500).json({
@@ -241,9 +261,17 @@ authRouter.post("/change-password", requireAuth, async (req: Request, res: Respo
  */
 authRouter.post("/logout", async (req: Request, res: Response) => {
   res.setHeader("Cache-Control", "no-store");
-  if (req.session) {
-    await revokeSessionByHash(req.session.tokenHash);
+  try {
+    if (req.session) {
+      await revokeSessionByHash(req.session.tokenHash);
+    }
+    clearSessionCookie(res);
+    return res.status(204).end();
+  } catch (err) {
+    console.error("Logout error:", err);
+    return res.status(500).json({
+      error: "INTERNAL_ERROR",
+      message: "An unexpected error occurred during session revocation",
+    });
   }
-  clearSessionCookie(res);
-  return res.status(204).end();
 });
