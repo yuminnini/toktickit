@@ -123,7 +123,7 @@
   - `client`: 12 test files passed, 65 tests passed (0 failures, 100% pass rate).
   - `server build` (`tsc`): 0 errors, build clean.
   - `client build` (`tsc && vite build`): 0 errors, build clean.
-- **Exit Gate Status**: Phase F2 (P03–P06) implementation completed and fully verified against contracts. Ready for peer review.
+- **Exit Gate Status**: Phase F2 (P03–P06) implementation completed and fully verified against contracts. Opened [PR #42](https://github.com/yuminnini/toktickit/pull/42) (`codex/lab3-p03-p06-auth-roles` → `lab3-staging`) for Issue #41. Ready for peer review.
 
 
 
