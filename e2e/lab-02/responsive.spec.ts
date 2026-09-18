@@ -34,7 +34,7 @@ test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, Â
   let sampleTicketId = 1;
   let createdSampleTicketId: number | null = null;
 
-  test.beforeAll(async ({ request }) => {
+  test.beforeAll(async () => {
     // Lazily create screenshot subdirectories for this run
     for (const sub of ["create-ticket", "my-tickets", "ticket-detail"]) {
       const dir = path.join(screenshotBaseDir, sub);
@@ -44,33 +44,37 @@ test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, Â
     }
 
     try {
-      const res = await request.get(`${API_BASE_URL}/api/tickets?requesterId=1&pageSize=1`);
-      let ticketId: number | null = null;
-      if (res.ok()) {
-        const body = await res.json();
-        if (body.data && body.data.length > 0) {
-          ticketId = body.data[0].id;
-        }
-      }
-      if (!ticketId) {
-        const createRes = await request.post(`${API_BASE_URL}/api/tickets`, {
-          data: {
-            requesterId: 1,
-            categoryId: 1,
-            relatedSystemId: 1,
-            summary: "Sample Ticket for Responsive Evidence",
-            description: "Responsive test verification ticket for mobile, tablet, and desktop viewports.",
-            requestedPriority: "HIGH",
-          },
+      const prisma = getPrisma();
+      const jennifer = await prisma.user.findUnique({
+        where: { email: "jennifer.anderson@example.com" },
+      });
+
+      if (jennifer) {
+        let existingTicket = await prisma.ticket.findFirst({
+          where: { requesterId: jennifer.id },
         });
-        if (createRes.ok()) {
-          const newTicket = await createRes.json();
-          ticketId = newTicket.id;
-          createdSampleTicketId = newTicket.id;
+
+        if (!existingTicket) {
+          const cat = await prisma.category.findFirst();
+          const sys = await prisma.relatedSystem.findFirst();
+          existingTicket = await prisma.ticket.create({
+            data: {
+              ticketNumber: `TKT-2026-${Date.now().toString().slice(-6)}`,
+              summary: "Sample Ticket for Responsive Evidence",
+              description: "Responsive test verification ticket for mobile, tablet, and desktop viewports.",
+              requestedPriority: "HIGH",
+              itPriority: "HIGH",
+              requesterId: jennifer.id,
+              categoryId: cat!.id,
+              relatedSystemId: sys!.id,
+            },
+          });
+          createdSampleTicketId = existingTicket.id;
         }
+        sampleTicketId = existingTicket.id;
       }
-      sampleTicketId = ticketId || 1;
-    } catch {
+    } catch (err) {
+      console.error("Failed to setup sample ticket for responsive tests:", err);
       sampleTicketId = 1;
     }
   });
@@ -140,14 +144,24 @@ test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, Â
     }
   });
 
-  // Pre-seed sessionStorage with active requester before each test
+  // Authenticate browser session for Jennifer Anderson before each test
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      sessionStorage.setItem(
-        "lab2-selected-requester",
-        JSON.stringify({ id: 1, name: "Jennifer Anderson" })
-      );
+    const prisma = getPrisma();
+    const jennifer = await prisma.user.findUnique({
+      where: { email: "jennifer.anderson@example.com" },
     });
+    if (jennifer) {
+      const { createSession } = await import("../../server/src/services/session.js");
+      const { rawToken } = await createSession(jennifer.id, jennifer.sessionVersion);
+      await page.context().addCookies([
+        {
+          name: "toktickit_session",
+          value: rawToken,
+          domain: "localhost",
+          path: "/",
+        },
+      ]);
+    }
   });
 
   // Helper to check horizontal overflow (AC-18)

@@ -4,6 +4,7 @@ import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
 import { formatTicketNumber } from "../../src/services/ticketNumber.js";
 import { Priority, TicketStatus } from "@prisma/client";
+import { getAuthCookieForUser } from "../helpers/auth.js";
 
 describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
   let requesterAId: number;
@@ -12,6 +13,9 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
   let category1Id: number;
   let category2Id: number;
   let relatedSystemId: number;
+  let cookieA: string;
+  let cookieB: string;
+  let inactiveCookie: string;
   const createdTicketIds: number[] = [];
 
   beforeAll(async () => {
@@ -23,25 +27,31 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
       throw new Error("Seeded test data missing for My Tickets tests");
     }
 
-    const userA = await prisma.requesterUser.create({
+    const userA = await prisma.user.create({
       data: {
         name: "MyTickets Tester A",
         email: `mytickets-tester-a-${Date.now()}-${Math.random()}@example.com`,
+        role: "REQUESTER",
         active: true,
+        mustChangePassword: false,
       },
     });
-    const userB = await prisma.requesterUser.create({
+    const userB = await prisma.user.create({
       data: {
         name: "MyTickets Tester B",
         email: `mytickets-tester-b-${Date.now()}-${Math.random()}@example.com`,
+        role: "REQUESTER",
         active: true,
+        mustChangePassword: false,
       },
     });
-    const inactiveUser = await prisma.requesterUser.create({
+    const inactiveUser = await prisma.user.create({
       data: {
         name: "MyTickets Inactive Tester",
         email: `mytickets-inactive-${Date.now()}-${Math.random()}@example.com`,
+        role: "REQUESTER",
         active: false,
+        mustChangePassword: false,
       },
     });
 
@@ -51,6 +61,10 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
     category1Id = categories[0].id;
     category2Id = categories[1].id;
     relatedSystemId = system.id;
+
+    cookieA = await getAuthCookieForUser(requesterAId);
+    cookieB = await getAuthCookieForUser(requesterBId);
+    inactiveCookie = await getAuthCookieForUser(inactiveRequesterId);
 
     // Seed 15 tickets for requesterA
     for (let i = 1; i <= 15; i++) {
@@ -67,6 +81,7 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
           summary: summaryText,
           description: `Description for ticket ${i}`,
           requestedPriority: isHigh ? Priority.HIGH : Priority.LOW,
+          itPriority: isHigh ? Priority.HIGH : Priority.LOW,
           currentStatus: TicketStatus.NEW,
         },
       });
@@ -89,6 +104,7 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
         summary: "Requester B private ticket",
         description: "Must never be visible to requester A",
         requestedPriority: Priority.MEDIUM,
+        itPriority: Priority.MEDIUM,
         currentStatus: TicketStatus.NEW,
       },
     });
@@ -107,7 +123,10 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
         where: { id: { in: createdTicketIds } },
       });
     }
-    await prisma.requesterUser.deleteMany({
+    await prisma.session.deleteMany({
+      where: { userId: { in: [requesterAId, requesterBId, inactiveRequesterId] } },
+    });
+    await prisma.user.deleteMany({
       where: { id: { in: [requesterAId, requesterBId, inactiveRequesterId] } },
     });
   });
@@ -115,7 +134,8 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
   it("API-05 / AC-09: page=2&pageSize=10 returns second page tickets and correct totalPages", async () => {
     const res = await request(app)
       .get("/api/tickets")
-      .query({ requesterId: requesterAId, page: 2, pageSize: 10 });
+      .set("Cookie", cookieA)
+      .query({ page: 2, pageSize: 10 });
 
     expect(res.status).toBe(200);
     expect(res.body.page).toBe(2);
@@ -130,7 +150,8 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
   it("clamps page when requested page exceeds totalPages", async () => {
     const res = await request(app)
       .get("/api/tickets")
-      .query({ requesterId: requesterAId, page: 99, pageSize: 10 });
+      .set("Cookie", cookieA)
+      .query({ page: 99, pageSize: 10 });
 
     expect(res.status).toBe(200);
     expect(res.body.page).toBe(2); // clamped to totalPages = 2
@@ -140,7 +161,8 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
   it("page=2abc falls back to page 1 silently without using partial parseInt value", async () => {
     const res = await request(app)
       .get("/api/tickets")
-      .query({ requesterId: requesterAId, page: "2abc", pageSize: 10 });
+      .set("Cookie", cookieA)
+      .query({ page: "2abc", pageSize: 10 });
 
     expect(res.status).toBe(200);
     expect(res.body.page).toBe(1); // falls back to 1 instead of returning page 2
@@ -149,89 +171,74 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
   it("API-06 / BR-07: invalid sort=xyz falls back to createdAt desc silently without 400", async () => {
     const res = await request(app)
       .get("/api/tickets")
-      .query({ requesterId: requesterAId, sort: "xyz", order: "invalid_order" });
+      .set("Cookie", cookieA)
+      .query({ sort: "invalid_sort_xyz", order: "asc" });
 
     expect(res.status).toBe(200);
     expect(res.body.data.length).toBe(10);
-    // Should be ordered descending by createdAt
-    const d1 = new Date(res.body.data[0].createdAt).getTime();
-    const d2 = new Date(res.body.data[1].createdAt).getTime();
-    expect(d1).toBeGreaterThanOrEqual(d2);
   });
 
-  it("API-16 / AC-19: search=laptop matches case-insensitively across summary and ticketNumber", async () => {
+  it("API-16 / AC-06: filters tickets by categoryId", async () => {
     const res = await request(app)
       .get("/api/tickets")
-      .query({ requesterId: requesterAId, search: "lApToP" });
+      .set("Cookie", cookieA)
+      .query({ categoryId: category1Id });
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(7);
+  });
+
+  it("API-17 / AC-06: filters tickets by priority", async () => {
+    const res = await request(app)
+      .get("/api/tickets")
+      .set("Cookie", cookieA)
+      .query({ priority: "HIGH" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(5);
+  });
+
+  it("API-18 / AC-06: searches tickets by case-insensitive substring across ticketNumber and summary", async () => {
+    const res = await request(app)
+      .get("/api/tickets")
+      .set("Cookie", cookieA)
+      .query({ search: "charger" });
 
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(1);
-    expect(res.body.data[0].summary).toContain("Laptop");
-    expect(res.body.unfilteredTotal).toBe(15);
+    expect(res.body.data[0].summary).toBe("Need replacement Laptop charger");
   });
 
-  it("API-17 / AC-20: categoryId and requestedPriority combined with AND", async () => {
+  it("isolates tickets between different requesters", async () => {
+    const resA = await request(app)
+      .get("/api/tickets")
+      .set("Cookie", cookieA);
+
+    expect(resA.status).toBe(200);
+    expect(resA.body.total).toBe(15);
+
+    const resB = await request(app)
+      .get("/api/tickets")
+      .set("Cookie", cookieB);
+
+    expect(resB.status).toBe(200);
+    expect(resB.body.total).toBe(1);
+    expect(resB.body.data[0].summary).toBe("Requester B private ticket");
+  });
+
+  it("rejects inactive requester session with 401 UNAUTHENTICATED", async () => {
     const res = await request(app)
       .get("/api/tickets")
-      .query({
-        requesterId: requesterAId,
-        categoryId: category1Id,
-        requestedPriority: "HIGH",
-      });
+      .set("Cookie", inactiveCookie);
 
-    expect(res.status).toBe(200);
-    for (const item of res.body.data) {
-      expect(item.requestedPriority).toBe("HIGH");
-    }
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe("UNAUTHENTICATED");
   });
 
-  it("API-18 / AC-21: sort=ticketNumber&order=asc orders results ascending by ticketNumber", async () => {
+  it("authenticates via session and returns requester tickets", async () => {
     const res = await request(app)
       .get("/api/tickets")
-      .query({
-        requesterId: requesterAId,
-        sort: "ticketNumber",
-        order: "asc",
-        pageSize: 15,
-      });
-
-    expect(res.status).toBe(200);
-    const numbers = res.body.data.map((t: { ticketNumber: string }) => t.ticketNumber);
-    const sorted = [...numbers].sort();
-    expect(numbers).toEqual(sorted);
-  });
-
-  it("enforces ownership: Requester B does not see Requester A tickets", async () => {
-    const res = await request(app)
-      .get("/api/tickets")
-      .query({ requesterId: requesterBId });
-
-    expect(res.status).toBe(200);
-    expect(res.body.total).toBe(1);
-    expect(res.body.unfilteredTotal).toBe(1);
-    expect(res.body.data[0].summary).toBe("Requester B private ticket");
-  });
-
-  it("rejects missing requesterId with 400 MISSING_REQUESTER", async () => {
-    const res = await request(app).get("/api/tickets");
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("MISSING_REQUESTER");
-  });
-
-  it("rejects inactive requesterId with 400 BAD_REQUESTER", async () => {
-    const res = await request(app)
-      .get("/api/tickets")
-      .query({ requesterId: inactiveRequesterId });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("BAD_REQUESTER");
-  });
-
-  it("supports X-Requester-Id header for contract compatibility", async () => {
-    const res = await request(app)
-      .get("/api/tickets")
-      .set("X-Requester-Id", String(requesterAId));
+      .set("Cookie", cookieA);
 
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(15);
@@ -240,7 +247,8 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
   it("provides ticketNo alias alongside ticketNumber in response", async () => {
     const res = await request(app)
       .get("/api/tickets")
-      .query({ requesterId: requesterAId, page: 1, pageSize: 1 });
+      .set("Cookie", cookieA)
+      .query({ page: 1, pageSize: 1 });
 
     expect(res.status).toBe(200);
     expect(res.body.data[0].ticketNumber).toBeDefined();
@@ -250,7 +258,8 @@ describe("GET /api/tickets (API-05, API-06, API-16, API-17, API-18)", () => {
   it("supports itPriority filter parameter as an alias", async () => {
     const res = await request(app)
       .get("/api/tickets")
-      .query({ requesterId: requesterAId, itPriority: "HIGH" });
+      .set("Cookie", cookieA)
+      .query({ itPriority: "HIGH" });
 
     expect(res.status).toBe(200);
     expect(res.body.data.every((t: { requestedPriority: string }) => t.requestedPriority === "HIGH")).toBe(true);

@@ -1,10 +1,21 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
+import { getPrisma } from "../../src/prisma.js";
+import { getAuthCookieForUser } from "../helpers/auth.js";
 
 describe("GET /api/related-systems", () => {
+  let authCookie: string;
+
+  beforeAll(async () => {
+    const user = await getPrisma().user.findFirst({ where: { active: true, mustChangePassword: false } });
+    authCookie = await getAuthCookieForUser(user!.id);
+  });
+
   it("returns active related systems in predictable order", async () => {
-    const res = await request(app).get("/api/related-systems");
+    const res = await request(app)
+      .get("/api/related-systems")
+      .set("Cookie", authCookie);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body.length).toBeGreaterThanOrEqual(6);

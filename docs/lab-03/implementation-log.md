@@ -85,4 +85,71 @@
   - `playwright` E2E suite: 2 test files, 4 passed (exit code 0, duration 19.1s).
 - **Exit Gate Status**: Completed / Passed — Phase F1 (P00–P02 Baseline, Contracts & Harness Isolation) approved by peer reviewer; PR #38 merged into `lab3-staging` at commit `33624d0`.
 
+## 2026-09-18 — Phase F2 (P03–P06) Migration, Authentication, Authorization & Auth UI
 
+- **Date / Contributor / Model**: 2026-09-18 | yuminnini (b4ymin) | Antigravity (Gemini 3.8 Flash)
+- **Phase & Work Packages**: F2 (P03–P06) | Issue #41 | Branch: `codex/lab3-p03-p06-auth-roles` | Base: `lab3-staging`
+- **Requirements & ACs**: AC-01–02, AC-05–18, BR-01–03, BR-05, BR-10–13, HARNESS-01
+- **Implementations**:
+  - **P03 (Schema Migration & Idempotent Seed)**:
+    - Extended Prisma schema: `Role` enum (`REQUESTER`, `IT_STAFF`, `ADMINISTRATOR`), `TicketStatus` enum extensions (`WAITING_FOR_REQUESTER`, `REOPENED`, `CANCELLED`), `User @@map("RequesterUser")`, `Session`, `PublicComment`, `InternalNote`, ticket operational fields (`itPriority`, `ticketOwnerId`, `version`, `appearsResolvedAt`, `appearsResolvedById`).
+    - Deployed idempotent forward migration SQL with `IF NOT EXISTS` guards (`server/prisma/migrations/20260918000000_lab3_auth_roles_ticketing/migration.sql`).
+    - Implemented idempotent seed script (`server/prisma/seed.ts`) provisioning 4 active + 1 inactive requesters, 3 active + 1 inactive IT staff, 1 administrator, and 24 tickets across all 8 statuses/priorities with sample notes and comments.
+    - Added Prisma `$use` middleware and strongly typed `requesterUser` alias on `ExtendedPrismaClient` in `server/src/prisma.ts`.
+  - **P04 (Authentication Backend API)**:
+    - Password hashing service (`server/src/services/password.ts`) with Argon2id (`@node-rs/argon2`, memory: 19456 KiB, iterations: 2, parallelism: 1) and policy validation (12–128 characters, whitespace preserved, confirm check, new != old).
+    - Rolling window rate limiter (`server/src/services/rateLimiter.ts`) enforcing 5 failed attempts per 15-minute window per email+IP, triggering 429 with `Retry-After` on the 6th attempt.
+    - Stateful session service (`server/src/services/session.ts`) generating 32-byte crypto tokens, storing SHA-256 token hash in DB, 8-hour lifetime, CSRF token, and setting `toktickit_session` HttpOnly cookie.
+    - CSRF protection middleware (`server/src/middleware/csrf.ts`) verifying Origin on mutations and `X-CSRF-Token` header for active sessions.
+    - Auth routes (`server/src/routes/auth.ts`) mounted at `/api/auth` (`/login`, `/me`, `/csrf`, `/change-password`, `/logout`).
+  - **P05 (Server Authorization & Session Identity)**:
+    - Auth middleware (`server/src/middleware/auth.ts`): `authenticateSession`, `requireAuth`, `requirePasswordChanged` (enforces 403 `PASSWORD_CHANGE_REQUIRED`), `requireRole`.
+    - Decommissioned `/api/requesters` returning 404.
+    - Business routes updated in `server/src/app.ts` to derive identity strictly from session, ignoring spoofed `X-Requester-Id`.
+    - Foreign resource 404 non-disclosure and internal notes 403 isolation enforced.
+    - Adapted legacy test suites to authenticate via session cookies and send CSRF tokens on mutations.
+  - **P06 (Frontend Authentication UI & Route Guards)**:
+    - Created `client/src/context/AuthContext.tsx` managing `user`, `isLoading`, `login`, `logout`, `changePassword`, `refreshUser`, and clearing legacy `lab2-selected-requester` sessionStorage.
+    - Updated `client/src/api.ts` with `credentials: "include"`, CSRF token caching, and auth methods.
+    - Created `client/src/pages/LoginPage.tsx` with email/password inputs, reveal toggle, busy state, and 429 countdown.
+    - Created `client/src/pages/ChangePasswordPage.tsx` with policy validation, forced-change banner, and error feedback.
+    - Updated `client/src/components/AppShell.tsx` with user badge, role badge, logout button, and complete removal of development requester switcher.
+    - Created `client/src/components/RouteGuard.tsx` enforcing session, forced password change redirect, and RBAC.
+    - Updated `client/src/components/Badge.tsx` supporting new statuses and role badges.
+    - Updated `client/src/App.tsx` routing `/login`, `/change-password`, `RoleRedirect`, and route guards.
+    - Created comprehensive unit/component tests in `client/tests/lab-03/Login.test.tsx` (T12) and `client/tests/lab-03/AuthShell.test.tsx` (T13).
+- **Test Results**:
+  - `server`: 17 test files passed, 113 tests passed (0 failures, 100% pass rate).
+  - `client`: 12 test files passed, 65 tests passed (0 failures, 100% pass rate).
+  - `server build` (`tsc`): 0 errors, build clean.
+  - `client build` (`tsc && vite build`): 0 errors, build clean.
+- **Exit Gate Status**: Phase F2 (P03–P06) implementation completed and fully verified against contracts. Opened [PR #42](https://github.com/yuminnini/toktickit/pull/42) (`codex/lab3-p03-p06-auth-roles` → `lab3-staging`) for Issue #41. Ready for peer review.
+
+### 2026-09-18 (Evening): Phase F2 (P03–P06) Peer Review Round 1 Resolution
+- **Peer Review Feedback Addressed (7 items)**:
+  1. `[P1 Fixed]` **Seed Ticket Overwrite**: Isolated fixture ticket numbers into dedicated range `TKT-2026-900001`–`900024` and configured `update: {}` on upsert in `server/prisma/seed.ts` so re-seeding never overwrites existing tickets. Added integration test verifying non-overwrite.
+  2. `[P1 Fixed]` **Seed Account Status & Role Preservation**: Updated `seed.ts` to preserve existing user roles, active status, and names, filling in only missing credentials (`passwordHash`). Added integration test verifying account preservation.
+  3. `[P2 Fixed]` **Rate Limit Header Spoofing**: Configured safe `trust proxy` setting in `server/src/app.ts` and updated `getClientIp` in `server/src/routes/auth.ts` to use Express's validated `req.ip` rather than trusting unverified `X-Forwarded-For` headers. Added test verifying rotated `X-Forwarded-For` cannot bypass rate limiting.
+  4. `[P2 Fixed]` **Legacy Account Credential Provisioning**: Added routine in `seed.ts` to find and provision all users lacking credentials with initial password and `mustChangePassword: true`, ensuring zero orphaned unprovisioned accounts. Added integration test.
+  5. `[P2 Fixed]` **Atomic Password Change & Concurrency Control**: Wrapped password update, session revocation, and `createSession` inside a single Prisma `$transaction` in `server/src/routes/auth.ts`, supporting transaction client in `server/src/services/session.ts`. Added optimistic `sessionVersion` concurrency check returning 409 `CONCURRENT_MODIFICATION` on race condition.
+  6. `[P2 Fixed]` **Logout DB Error Propagation**: Modified `revokeSessionByHash` in `session.ts` to only ignore `P2025` (RecordNotFound) and rethrow any database connection/query failures. Updated `/api/auth/logout` to return 500 `INTERNAL_ERROR` upon failure. Added regression test.
+  7. `[P2 Fixed]` **E2E Test Authentication & Session Integration**: Updated `e2e/lab-02/requester-ticket-flow.spec.ts` to use real login (`/login`), real session cookies, CSRF tokens on mutating requests, verified ownership isolation 404, and verified logout flow. Added session authentication in `e2e/lab-02/responsive.spec.ts` and `{ credentials: "include" }` to `AttachmentSection.tsx` download fetch.
+- **Latest Real Verification Results**:
+  - `server`: 17 test files passed, 119 tests passed (0 failures, 100% pass rate).
+  - `client`: 12 test files passed, 65 tests passed (0 failures, 100% pass rate).
+  - `playwright`: 4 E2E tests passed (15.3s, 0 failures, 100% pass rate).
+  - `server build` (`tsc`): 0 errors, build clean.
+  - `client build` (`tsc && vite build`): 0 errors, build clean.
+- **Status**: Round 1 feedback fully resolved and tested.
+
+### 2026-09-18 (Night): Phase F2 (P03–P06) Peer Review Round 2 Resolution
+- **Peer Review Feedback Addressed (2 items)**:
+  1. `[P2 Fixed]` **Main Seed Enforces Forced Password Change**: Updated `server/prisma/seed.ts` so that all seed accounts (`USERS`), including Jennifer Anderson and Michael Brown, have `mustChangePassword: true` per specification. Bypassing forced password change for automated browser flows is strictly isolated to E2E fixture preparation in `e2e/lab-02/requester-ticket-flow.spec.ts` (`test.beforeAll`). Added regression test in `server/tests/lab-03/seed.integration.test.ts`.
+  2. `[P2 Fixed]` **Differentiate Session Not Found from DB Read Failure**: Updated `server/src/middleware/auth.ts` (`authenticateSession`) so that database read or revocation errors in the catch block immediately return 500 `INTERNAL_ERROR` rather than swallowing the error and calling `next()`. This prevents `/api/auth/logout` from falsely returning 204 when the session was not revoked due to a database outage. Additionally hardened `/api/auth/logout` in `server/src/routes/auth.ts` to revoke tokens directly from session cookies when `req.session` is unpopulated, propagating DB errors as 500. Added regression test in `server/tests/lab-03/auth.api.test.ts`.
+- **Latest Real Verification Results**:
+  - `server`: 17 test files passed, 121 tests passed (0 failures, 100% pass rate).
+  - `client`: 12 test files passed, 65 tests passed (0 failures, 100% pass rate).
+  - `playwright`: 4 E2E tests passed (22.2s, 0 failures, 100% pass rate).
+  - `server build` (`tsc`): 0 errors, build clean.
+  - `client build` (`tsc && vite build`): 0 errors, build clean.
+- **Status**: Round 2 feedback fully resolved, all test suites passing, ready for reviewer merge of PR #42.
