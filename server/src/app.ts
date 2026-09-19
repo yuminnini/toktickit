@@ -805,4 +805,39 @@ app.delete(
   }
 );
 
+// Test-only route for verifying unhandled 500 error sanitization (AC-53)
+if (process.env.NODE_ENV === "test") {
+  app.get("/api/test-500-error", (_req: Request, _res: Response) => {
+    throw new Error("Simulated unhandled internal error with database secret: postgresql://secret_user:secret_pass@db:5432/toktickit");
+  });
+}
+
+// 404 handler for unmatched /api routes
+app.use("/api/*", (_req: Request, res: Response) => {
+  res.status(404).json({
+    error: "NOT_FOUND",
+    message: "Resource not found",
+  });
+});
+
+// Global safe error handling middleware (AC-53)
+app.use((err: any, _req: Request, res: Response, _next: any) => {
+  if (res.headersSent) {
+    return;
+  }
+  if (err instanceof SyntaxError && "body" in err && (err as any).status === 400) {
+    res.status(400).json({
+      error: "INVALID_JSON",
+      message: "Malformed JSON payload in request body",
+    });
+    return;
+  }
+  const status = typeof err?.status === "number" ? err.status : 500;
+  res.status(status).json({
+    error: err?.code && typeof err.code === "string" ? err.code : "INTERNAL_ERROR",
+    message: status === 500 ? "An unexpected error occurred" : (err?.message || "Error processing request"),
+  });
+});
+
 export default app;
+

@@ -79,6 +79,19 @@ export default function AdminUsersPage() {
     return () => controller.abort();
   }, [loadUsers]);
 
+  // Accessibility: Dismiss modals on Escape key (AC-52)
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        if (isCreateOpen) setIsCreateOpen(false);
+        if (editingUser) setEditingUser(null);
+        if (resettingUser) setResettingUser(null);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isCreateOpen, editingUser, resettingUser]);
+
   // Handle Create User
   async function handleCreateSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -487,6 +500,7 @@ export default function AdminUsersPage() {
                     className="btn btn-outline-secondary btn-sm flex-fill"
                     onClick={() => handleOpenEdit(u)}
                     style={{ minHeight: "44px" }}
+                    aria-label={`Edit ${u.name}`}
                   >
                     Edit
                   </button>
@@ -495,6 +509,7 @@ export default function AdminUsersPage() {
                     className="btn btn-outline-secondary btn-sm flex-fill"
                     onClick={() => handleOpenReset(u)}
                     style={{ minHeight: "44px" }}
+                    aria-label={`Reset Password for ${u.name}`}
                   >
                     Reset Password
                   </button>
