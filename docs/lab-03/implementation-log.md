@@ -201,5 +201,5 @@
   - `playwright`: 3 test files passed, 5 tests passed (0 failures, 100% pass rate).
   - `server build` (`tsc`): 0 errors, build clean.
   - `client build` (`tsc && vite build`): 0 errors, build clean.
-- **Exit Gate Status**: Phase F3 (P07–P10) implementation completed, hardened for concurrency and reliability, and fully verified against contracts. Ready for pull request submission and peer review.
+- **Exit Gate Status**: Completed / Passed — Phase F3 (P07–P10) approved by peer reviewer; PR #44 merged into `lab3-staging` at commit `f229400`. Ready for Phase F4 (P11–P12).
 
