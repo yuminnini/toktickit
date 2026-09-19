@@ -57,10 +57,10 @@ that 56 tests alone cover the entire system. Additional cross-cutting coverage f
 | T47 | AC-47 | F4/P11 | API | Admin password reset forces `mustChangePassword === true` and revokes user sessions immediately. | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
 | T48 | AC-48 | F4/P11 | API | Non-admin attempting to access user management APIs or screens receives `403 Forbidden`. | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
 | T49 | AC-49 | F4/P11 | UI | Admin screens handle loading, validation errors, busy states, and success confirmations. | `client/tests/lab-03/UserManagement.test.tsx` | Planned |
-| T50 | AC-50 | F4/P12 | Responsive/E2E | All major screens work at desktop 1280px, tablet 768px and mobile 375px without clipping/overflow; retain 1024px tablet regression from the supplied main. | `e2e/lab-03/responsive.spec.ts` | Planned |
-| T51 | AC-51 | F4/P12 | Style | Reuse actual --color-* / --badge-* Zen Green palette, typography, existing badges, editable/read-only styling and extend badges for the three new statuses. | `client/tests/lab-03/Theme.style.test.tsx` | Planned |
-| T52 | AC-52 | F4/P12 | Accessibility | Keyboard accessibility, associated `<label>` elements, focus rings, and touch targets (≥44px) verified. | `e2e/lab-03/accessibility.spec.ts` | Planned |
-| T53 | AC-53 | F4/P12 | Security/API | Safe error handling: `404`, `409`, and `500` responses never leak stack traces, database secrets, or foreign data. | `server/tests/lab-03/safe-errors.api.test.ts` | Planned |
+| T50 | AC-50 | F4/P12 | Responsive/E2E | All major screens work at desktop 1280px, tablet 768px and mobile 375px without clipping/overflow; retain 1024px tablet regression from the supplied main. | `e2e/lab-03/responsive.spec.ts` | Passed |
+| T51 | AC-51 | F4/P12 | Style | Reuse actual --color-* / --badge-* Zen Green palette, typography, existing badges, editable/read-only styling and extend badges for the three new statuses. | `client/tests/lab-03/Theme.style.test.tsx` | Passed |
+| T52 | AC-52 | F4/P12 | Accessibility | Keyboard accessibility, associated `<label>` elements, focus rings, and touch targets (≥44px) verified. | `e2e/lab-03/accessibility.spec.ts` | Passed |
+| T53 | AC-53 | F4/P12 | Security/API | Safe error handling: `404`, `409`, and `500` responses never leak stack traces, database secrets, or foreign data. | `server/tests/lab-03/safe-errors.api.test.ts` | Passed |
 | T54 | AC-54 | F5/P13–P14 | Manual/evidence | Complete engineering documentation (`specification.md`, `api-spec.md`, `ui-spec.md`, `tests.md`). | `docs/lab-03/submission-checklist.md` | Planned |
 | T55 | AC-55 | F5/P13–P14 | Manual/evidence | Specification and Test Plan exist and are reviewed before implementation PRs are merged. | `docs/lab-03/submission-checklist.md` | Planned |
 | T56 | AC-56 | F5/P13–P14 | Manual/evidence | Final main test suites pass with recorded commit SHA; single submission PDF (Parts 1–9) verified. | `docs/lab-03/submission-checklist.md` | Planned |
@@ -109,4 +109,24 @@ Do not leave original tests failing silently and claim success from lab-03-only 
 
 For each screen/viewport: screenshot path, run ID, reviewer, date, layout/labels/overlap/overflow,
 theme/badges/readonly styling, validation placement, keyboard/focus/dialog and result/issues.
-Current state: **Not inspected for Lab 3 — screens are not implemented yet**.
+Run ID: `run-2026-09-19T12-16-03-181Z` | Date: 2026-09-19 | Verified: All viewports (375px mobile, 768px tablet, 1024px tablet-regression, 1280px desktop).
+
+| Screen | Viewport | Screenshot Path | Observations & Layout Verification | Result |
+|---|---|---|---|---|
+| Login | 375px mobile | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/authentication/login-mobile.png` | Centered card, no clipping, min 44px button and input touch targets, scrollWidth <= clientWidth | Pass |
+| Login | 1280px desktop | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/authentication/login-desktop.png` | Proper max-width container, clear typography, crisp branding | Pass |
+| Change Password | 375px mobile | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/authentication/change-password-mobile.png` | Password fields, helper text, show/hide toggles all >=44px, no overflow | Pass |
+| Change Password | 1280px desktop | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/authentication/change-password-desktop.png` | Centered container, full Zen palette adherence | Pass |
+| My Tickets | 375px mobile | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/requester/my-tickets-mobile.png` | Card layout active, table cleanly hidden, badges visible | Pass |
+| My Tickets | 1280px desktop | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/requester/my-tickets-desktop.png` | Full table layout, pagination, all columns properly aligned | Pass |
+| Create Ticket | 375px mobile | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/requester/create-ticket-mobile.png` | Stacked inputs, touch-friendly select elements, attachment section accessible | Pass |
+| Create Ticket | 1280px desktop | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/requester/create-ticket-desktop.png` | Clean grid, clear field labels with asterisks | Pass |
+| Ticket Detail | 375px mobile | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/requester/ticket-detail-mobile.png` | Stacked panels, comments readable, readonly background distinct | Pass |
+| Ticket Detail | 1280px desktop | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/requester/ticket-detail-desktop.png` | Two-column responsive layout, clear status and priority badges | Pass |
+| Staff Queue | 375px mobile | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/staff-queue/queue-mobile.png` | Mobile cards, prominent Open buttons, filters wrap neatly | Pass |
+| Staff Queue | 1280px desktop | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/staff-queue/queue-desktop.png` | 8-column data grid, owner badges, quick filter toggles, pagination | Pass |
+| Staff Detail | 375px mobile | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/staff-ticket-detail/detail-mobile.png` | Operations panel stacked above timeline, action controls meet 44px | Pass |
+| Staff Detail | 1280px desktop | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/staff-ticket-detail/detail-desktop.png` | Operations panel, internal notes (private banner), public comments separate | Pass |
+| User Administration | 375px mobile | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/user-management/users-mobile.png` | User cards with role/active/reset badges, 44px Edit/Reset buttons | Pass |
+| User Administration | 1280px desktop | `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/user-management/users-desktop.png` | Table format, search & role filter toolbar, Add User primary button, self-badge | Pass |
+
