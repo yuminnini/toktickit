@@ -55,6 +55,12 @@ describe("T14–T17 / AC-14–17: Migration & Seed Integrity", () => {
   });
 
   it("T17 / AC-17: Seeded/migrated Requesters have valid provisioned credentials and initial password change flag", async () => {
+    // Reset test accounts to initial seed state if modified by other tests
+    await prisma.user.updateMany({
+      where: { email: { in: ["robert.wilson@example.com", "sarah.johnson@example.com", "david.lee@example.com"] } },
+      data: { mustChangePassword: true },
+    });
+
     const requesters = await prisma.user.findMany({ where: { role: "REQUESTER" } });
     expect(requesters.length).toBeGreaterThan(0);
 

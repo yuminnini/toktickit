@@ -318,6 +318,9 @@ export interface TicketDetail {
   currentStatus: TicketStatusType;
   createdAt: string;
   attachments: AttachmentItem[];
+  appearsResolvedAt?: string | null;
+  appearsResolvedById?: number | null;
+  version?: number;
 }
 
 export interface GetTicketsParams {
@@ -454,6 +457,408 @@ export async function removeAttachment(
   return data;
 }
 
-export function getAttachmentDownloadUrl(attachmentId: number, requesterId: number): string {
-  return `${API_URL}/api/attachments/${attachmentId}/download?requesterId=${requesterId}`;
+export function getAttachmentDownloadUrl(attachmentId: number, requesterId?: number): string {
+  return `${API_URL}/api/attachments/${attachmentId}/download${requesterId ? `?requesterId=${requesterId}` : ""}`;
+}
+
+// ---------------------------------------------------------------------------
+// P08, P09, P10: Staff Queue, Operations & Communications Interfaces & Methods
+// ---------------------------------------------------------------------------
+
+export interface StaffTicketItem {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  category: { id: number; name: string };
+  requestedPriority: PriorityType;
+  itPriority: PriorityType;
+  currentStatus: TicketStatusType;
+  ticketOwner: { id: number; name: string; email: string } | null;
+  updatedAt: string;
+}
+
+export interface StaffQueueParams {
+  search?: string;
+  categoryId?: number;
+  requestedPriority?: PriorityType;
+  itPriority?: PriorityType;
+  status?: TicketStatusType;
+  owner?: "all" | "unassigned" | "mine";
+  ticketOwnerId?: number;
+  sort?: "ticketNumber" | "updatedAt" | "requestedPriority" | "itPriority" | "currentStatus";
+  order?: "asc" | "desc";
+  page?: number;
+  pageSize?: number;
+}
+
+export interface StaffQueueResponse {
+  data: StaffTicketItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface StaffTicketDetail {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  description: string;
+  category: { id: number; name: string };
+  relatedSystem: { id: number; name: string };
+  requestedPriority: PriorityType;
+  itPriority: PriorityType;
+  currentStatus: TicketStatusType;
+  requester: { id: number; name: string; email: string };
+  ticketOwner: { id: number; name: string; email: string } | null;
+  version: number;
+  appearsResolvedAt: string | null;
+  appearsResolvedById: number | null;
+  createdAt: string;
+  updatedAt: string;
+  attachments: AttachmentItem[];
+}
+
+export interface EligibleOwner {
+  id: number;
+  name: string;
+  email: string;
+  role: RoleType;
+}
+
+export interface CommunicationEntry {
+  id: number;
+  ticketId: number;
+  content: string;
+  author: { id: number; name: string; role: RoleType };
+  createdAt: string;
+}
+
+async function getOrFetchCsrf(): Promise<string> {
+  if (!cachedCsrfToken) {
+    try {
+      await fetchCsrfToken();
+    } catch {}
+  }
+  return cachedCsrfToken || "";
+}
+
+export async function fetchStaffTickets(
+  params: StaffQueueParams,
+  signal?: AbortSignal
+): Promise<StaffQueueResponse> {
+  const query = new URLSearchParams();
+  if (params.search) query.set("search", params.search);
+  if (params.categoryId) query.set("categoryId", String(params.categoryId));
+  if (params.requestedPriority) query.set("requestedPriority", params.requestedPriority);
+  if (params.itPriority) query.set("itPriority", params.itPriority);
+  if (params.status) query.set("status", params.status);
+  if (params.owner) query.set("owner", params.owner);
+  if (params.ticketOwnerId) query.set("ticketOwnerId", String(params.ticketOwnerId));
+  if (params.sort) query.set("sort", params.sort);
+  if (params.order) query.set("order", params.order);
+  if (params.page) query.set("page", String(params.page));
+  if (params.pageSize) query.set("pageSize", String(params.pageSize));
+
+  const res = await fetch(`${API_URL}/api/staff/tickets?${query.toString()}`, {
+    signal,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const error = new Error(data.message || "Failed to load staff tickets") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+export async function fetchStaffTicketDetail(
+  id: number,
+  signal?: AbortSignal
+): Promise<StaffTicketDetail> {
+  const res = await fetch(`${API_URL}/api/staff/tickets/${id}`, {
+    signal,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const error = new Error(data.message || "Failed to load staff ticket detail") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+export async function fetchEligibleOwners(): Promise<EligibleOwner[]> {
+  const res = await fetch(`${API_URL}/api/staff/eligible-owners`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || "Failed to load eligible owners");
+  }
+  const result = await res.json();
+  return result.data;
+}
+
+export async function claimTicket(
+  id: number,
+  expectedVersion: number
+): Promise<StaffTicketDetail> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/staff/tickets/${id}/claim`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ expectedVersion }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to claim ticket") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export async function assignTicketOwner(
+  id: number,
+  ownerId: number,
+  expectedVersion: number
+): Promise<StaffTicketDetail> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/staff/tickets/${id}/owner`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ ownerId, expectedVersion }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to assign ticket owner") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export async function updateItPriority(
+  id: number,
+  itPriority: PriorityType,
+  expectedVersion: number
+): Promise<StaffTicketDetail> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/staff/tickets/${id}/priority`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ itPriority, expectedVersion }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to update IT priority") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export async function updateTicketStatus(
+  id: number,
+  currentStatus: TicketStatusType,
+  expectedVersion: number
+): Promise<StaffTicketDetail> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/staff/tickets/${id}/status`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ currentStatus, expectedVersion }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to update ticket status") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export async function fetchTicketComments(
+  ticketId: number,
+  signal?: AbortSignal
+): Promise<CommunicationEntry[]> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, {
+    signal,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const error = new Error(data.message || "Failed to load comments") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  const result = await res.json();
+  return result.data;
+}
+
+export async function createTicketComment(
+  ticketId: number,
+  content: string
+): Promise<CommunicationEntry> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ content }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to add comment") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export async function fetchTicketNotes(
+  ticketId: number,
+  signal?: AbortSignal
+): Promise<CommunicationEntry[]> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/internal-notes`, {
+    signal,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const error = new Error(data.message || "Failed to load internal notes") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  const result = await res.json();
+  return result.data;
+}
+
+export async function createTicketNote(
+  ticketId: number,
+  content: string
+): Promise<CommunicationEntry> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/internal-notes`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ content }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to add internal note") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export async function indicateAppearsResolved(
+  ticketId: number
+): Promise<{
+  id: number;
+  appearsResolvedAt: string;
+  appearsResolvedById: number;
+  currentStatus: TicketStatusType;
+  version: number;
+}> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/appears-resolved`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({}),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to record resolution indication") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
 }
