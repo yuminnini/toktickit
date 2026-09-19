@@ -861,4 +861,126 @@ export async function indicateAppearsResolved(
     throw error;
   }
   return data;
-}
+}
+
+export async function fetchUsersAdmin(
+  params?: { search?: string; role?: RoleType },
+  signal?: AbortSignal
+): Promise<SafeUser[]> {
+  const query = new URLSearchParams();
+  if (params?.search) query.set("search", params.search);
+  if (params?.role) query.set("role", params.role);
+  const qStr = query.toString();
+  const url = `${API_URL}/api/admin/users${qStr ? `?${qStr}` : ""}`;
+
+  const res = await fetch(url, {
+    signal,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const error = new Error(data.message || "Failed to load users") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  const result = await res.json();
+  return result.data;
+}
+
+export async function createUserAdmin(data: {
+  name: string;
+  email: string;
+  role: RoleType;
+  active: boolean;
+  initialPassword: string;
+}): Promise<{ user: SafeUser }> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/admin/users`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify(data),
+  });
+
+  const resData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(resData.message || "Failed to create user") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = resData.error;
+    error.status = res.status;
+    throw error;
+  }
+  return resData;
+}
+
+export async function updateUserAdmin(
+  id: number,
+  data: {
+    name?: string;
+    email?: string;
+    role?: RoleType;
+    active?: boolean;
+  }
+): Promise<{ user: SafeUser; unassignedTicketCount: number }> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/admin/users/${id}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify(data),
+  });
+
+  const resData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(resData.message || "Failed to update user") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = resData.error;
+    error.status = res.status;
+    throw error;
+  }
+  return resData;
+}
+
+export async function resetUserPasswordAdmin(
+  id: number,
+  initialPassword: string
+): Promise<{ user: SafeUser }> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/admin/users/${id}/reset-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ initialPassword }),
+  });
+
+  const resData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(resData.message || "Failed to reset password") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = resData.error;
+    error.status = res.status;
+    throw error;
+  }
+  return resData;
+}
+

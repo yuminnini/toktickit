@@ -203,3 +203,36 @@
   - `client build` (`tsc && vite build`): 0 errors, build clean.
 - **Exit Gate Status**: Completed / Passed — Phase F3 (P07–P10) approved by peer reviewer; PR #44 merged into `lab3-staging` at commit `f229400`. Ready for Phase F4 (P11–P12).
 
+## 2026-09-19 — Phase F4 (P11) Administrator User Management
+
+- **Date / Contributor / Model**: 2026-09-19 | yuminnini (b4ymin) | Antigravity (Gemini 3.8 Flash)
+- **Phase & Work Packages**: F4 (P11: Administrator User Management) | Issue #45 (Umbrella #45 / Child #35) | Branch: `codex/lab3-p11-p12-admin-verification` | Base: `lab3-staging` (from `03f1dcb`)
+- **Requirements & ACs**: AC-40–49 (T40–T49), BR-06, BR-08, BR-12, BR-21, BR-22, BR-23, BR-24
+- **Implementations**:
+  - **P11 (Administrator User Management Backend & Safety Rules)**:
+    - Created `server/src/routes/admin.ts` mounted under `/api/admin` with `requireAuth`, `requirePasswordChanged`, `requireRole("ADMINISTRATOR")`.
+    - `GET /api/admin/users`: lists users ordered by `name asc`, `id asc` with safe user projection (SafeUser DTO), case-insensitive substring search across name and email, and single role filtering (`REQUESTER`, `IT_STAFF`, `ADMINISTRATOR`). Rejects invalid role with 400.
+    - `POST /api/admin/users`: provisions new user with `{ name, email, role, active, initialPassword }`. Validates 12–128 character policy, sets `mustChangePassword = true`, hashes with Argon2id, and rejects duplicate email with 409 `EMAIL_EXISTS`.
+    - `PATCH /api/admin/users/:id`: edits `{ name, email, role, active }`. Rejects credential and system fields (`400 VALIDATION_ERROR`).
+    - Enforced self-deactivation block (`400 SELF_DEACTIVATION`).
+    - Enforced last active administrator invariant with PostgreSQL row-level lock (`SELECT ... FOR UPDATE` on `"RequesterUser"`) inside transaction to serialize concurrent requests and eliminate zero-admin outcomes (`400 LAST_ACTIVE_ADMIN`).
+    - Implemented atomic ticket unassignment (`BR-23 / AC-46`): deactivating an owner or changing their role to `REQUESTER` automatically sets `ticketOwnerId = null`, increments ticket `version`, preserves status, and returns `unassignedTicketCount`.
+    - Implemented atomic session revocation (`BR-12`): role or active changes increment `sessionVersion` and delete all active sessions for that user.
+    - `POST /api/admin/users/:id/reset-password`: resets password with `{ initialPassword }`, sets `mustChangePassword = true`, and revokes all active sessions for that user.
+    - Added test suite: `server/tests/lab-03/users-admin.api.test.ts` (12/12 passed).
+  - **P11 (Frontend User Management UI)**:
+    - Added API client functions in `client/src/api.ts`: `fetchUsersAdmin`, `createUserAdmin`, `updateUserAdmin`, `resetUserPasswordAdmin`.
+    - Built responsive `client/src/pages/AdminUsersPage.tsx` using Zen Green design tokens (`--color-*`, `--badge-*`): desktop table, mobile card layout, loading skeleton, search and role filtering toolbar with reset button.
+    - Built Add User Modal with password reveal toggle and policy validation.
+    - Built Edit User Modal with disabled active switch on self (with helper explanation) and ticket unassignment warning.
+    - Built Reset Password Modal with session revocation explanation and confirmation.
+    - Integrated with `client/src/App.tsx` replacing placeholder at `/admin/users`.
+    - Added test suite: `client/tests/lab-03/UserManagement.test.tsx` (6/6 passed).
+- **Test Results**:
+  - `server`: 23 test files passed, 160 tests passed (0 failures, 100% pass rate).
+  - `client`: 14 test files passed, 76 tests passed (0 failures, 100% pass rate).
+  - `server build` (`tsc`): 0 errors, build clean.
+  - `client build` (`tsc && vite build`): 0 errors, build clean.
+- **Exit Gate Status**: P11 implementation completed and verified against all contracts. Ready for P12 (Integrated Verification).
+
+

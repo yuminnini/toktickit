@@ -17,6 +17,7 @@ import {
 import { authRouter } from "./routes/auth.js";
 import { staffRouter } from "./routes/staff.js";
 import { communicationsRouter } from "./routes/communications.js";
+import { adminRouter } from "./routes/admin.js";
 import {
   authenticateSession,
   requireAuth,
@@ -82,6 +83,9 @@ app.use("/api/auth", authRouter);
 
 // Staff Routes
 app.use("/api/staff", staffRouter);
+
+// Administrator Routes
+app.use("/api/admin", adminRouter);
 
 // Communications Routes (comments, internal notes, appears-resolved)
 app.use("/api/tickets", communicationsRouter);
