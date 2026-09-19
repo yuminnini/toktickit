@@ -57,7 +57,7 @@
 - **E2E Flow Integration (T39 / AC-39):**
   - สร้าง [`e2e/lab-03/staff-ticket-flow.spec.ts`](file:///c:/Users/uesr/Downloads/toktickit/e2e/lab-03/staff-ticket-flow.spec.ts) ทดสอบครบวงจร: ล็อกอิน Staff -> ค้นหาตั๋วในคิว -> เข้าหน้ารายละเอียด -> Claim ตั๋ว -> ตั้ง IT Priority -> ใส่ Comment สาธารณะและ Note ภายใน -> เปลี่ยนสถานะเป็น IN_PROGRESS และ RESOLVED สำเร็จอย่างสมบูรณ์
 - **ผลการทดสอบจริง (Real Verification Evidence):**
-  - **Server Vitest:** 21 test files, **141 tests passed** (100% pass)
+  - **Server Vitest:** 22 test files, **148 tests passed** (100% pass)
   - **Client Vitest:** 13 test files, **70 tests passed** (100% pass)
   - **Playwright E2E:** 3 test files, **5 tests passed** (100% pass)
   - **Client Build (`tsc && vite build`):** 0 errors

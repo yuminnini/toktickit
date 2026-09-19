@@ -187,14 +187,19 @@
     - Enforced append-only communications: `PUT`, `PATCH`, `DELETE` return 405 `METHOD_NOT_ALLOWED` with `Allow: GET, POST` header.
     - Content validation and sanitization: 1–2000 characters, trimmed, rejects spoofed author or timestamps, safely displayed as raw text without execution.
     - Integrated `PublicCommentsSection.tsx` and `InternalNotesSection.tsx` into client pages, and added "Problem Appears Resolved" banner and modal in `TicketDetail.tsx`.
-    - Created test suite: `server/tests/lab-03/comments-notes.api.test.ts` (5/5 passed).
+    - Created test suite: `server/tests/lab-03/comments-notes.api.test.ts` (6/6 passed).
+  - **Concurrency & Reliability Hardening**:
+    - Atomic conditional updates (`tx.ticket.updateMany`) for `POST /claim`, `PATCH /owner`, `PATCH /priority`, and `PATCH /status` to eliminate race conditions under concurrent requests.
+    - Owner eligibility check in status transitions: requires assigned owner to be active and have `IT_STAFF` or `ADMINISTRATOR` role (400 `OWNER_REQUIRED`).
+    - Error resilience in `loadTicketForAccess` returning 500 `INTERNAL_ERROR` on database failures instead of unhandled rejections.
+    - Added unit and simulation suite: `server/tests/lab-03/staff-workflow.unit.test.ts` (4/4 passed).
   - **End-to-End Flow (T39 / AC-39)**:
     - Created `e2e/lab-03/staff-ticket-flow.spec.ts` executing complete staff flow: login -> triage queue -> search & filter -> claim ticket -> set IT priority -> post public comment & internal note -> transition status to IN_PROGRESS and RESOLVED.
 - **Test Results**:
-  - `server`: 21 test files passed, 141 tests passed (0 failures, 100% pass rate).
+  - `server`: 22 test files passed, 148 tests passed (0 failures, 100% pass rate).
   - `client`: 13 test files passed, 70 tests passed (0 failures, 100% pass rate).
   - `playwright`: 3 test files passed, 5 tests passed (0 failures, 100% pass rate).
   - `server build` (`tsc`): 0 errors, build clean.
   - `client build` (`tsc && vite build`): 0 errors, build clean.
-- **Exit Gate Status**: Phase F3 (P07–P10) implementation completed and fully verified against contracts. Ready for pull request submission and peer review.
+- **Exit Gate Status**: Phase F3 (P07–P10) implementation completed, hardened for concurrency and reliability, and fully verified against contracts. Ready for pull request submission and peer review.
 

@@ -214,6 +214,57 @@ describe("P09: IT Staff Ticket Operations & Concurrency (T28–T33 / AC-28–AC-
         await prisma.ticket.delete({ where: { id: ticket.id } });
       }
     });
+
+    it("atomic concurrency: two simultaneous claims for the same unassigned ticket resolve with exactly one 200 and one 409", async () => {
+      const prisma = getPrisma();
+      const ticket = await prisma.ticket.create({
+        data: {
+          ticketNumber: `TKT-2026-${Math.floor(100000 + Math.random() * 900000)}`,
+          requesterId: requesterSession.id,
+          categoryId,
+          relatedSystemId,
+          summary: "Concurrent Claim Ticket",
+          description: "Testing racing claims",
+          requestedPriority: "MEDIUM",
+          currentStatus: "NEW",
+          version: 1,
+        },
+      });
+
+      try {
+        const [resA, resB] = await Promise.all([
+          request(app)
+            .post(`/api/staff/tickets/${ticket.id}/claim`)
+            .set("Origin", allowedOrigin)
+            .set("Cookie", staffA.cookie)
+            .set("X-CSRF-Token", staffA.csrfToken)
+            .send({ expectedVersion: 1 }),
+          request(app)
+            .post(`/api/staff/tickets/${ticket.id}/claim`)
+            .set("Origin", allowedOrigin)
+            .set("Cookie", staffB.cookie)
+            .set("X-CSRF-Token", staffB.csrfToken)
+            .send({ expectedVersion: 1 }),
+        ]);
+
+        const statuses = [resA.status, resB.status].sort();
+        expect(statuses).toEqual([200, 409]);
+
+        const successRes = resA.status === 200 ? resA : resB;
+        const conflictRes = resA.status === 409 ? resA : resB;
+
+        expect(successRes.body.version).toBe(2);
+        expect([staffA.id, staffB.id]).toContain(successRes.body.ticketOwnerId);
+        expect(["ALREADY_CLAIMED", "VERSION_CONFLICT"]).toContain(conflictRes.body.error);
+
+        // Verify database state: exactly one owner and version 2
+        const finalTicket = await prisma.ticket.findUnique({ where: { id: ticket.id } });
+        expect(finalTicket?.version).toBe(2);
+        expect([staffA.id, staffB.id]).toContain(finalTicket?.ticketOwnerId);
+      } finally {
+        await prisma.ticket.delete({ where: { id: ticket.id } });
+      }
+    });
   });
 
   describe("T30 / AC-30: Concurrency Control (VERSION_CONFLICT)", () => {
@@ -374,6 +425,49 @@ describe("P09: IT Staff Ticket Operations & Concurrency (T28–T33 / AC-28–AC-
         expect(inProgRes.body.currentStatus).toBe("IN_PROGRESS");
       } finally {
         await prisma.ticket.delete({ where: { id: ticket.id } });
+      }
+    });
+
+    it("rejects status transition with 400 OWNER_REQUIRED if assigned owner is inactive or has role REQUESTER", async () => {
+      const prisma = getPrisma();
+      const inactiveStaff = await prisma.user.create({
+        data: {
+          name: "Inactive Staff Tech",
+          email: `inactive.staff.${Date.now()}@example.com`,
+          role: "IT_STAFF",
+          active: false,
+          mustChangePassword: false,
+        },
+      });
+
+      const ticket = await prisma.ticket.create({
+        data: {
+          ticketNumber: `TKT-2026-${Math.floor(100000 + Math.random() * 900000)}`,
+          requesterId: requesterSession.id,
+          categoryId,
+          relatedSystemId,
+          summary: "Inactive Owner Ticket",
+          description: "Transition should fail if owner inactive",
+          requestedPriority: "LOW",
+          currentStatus: "NEW",
+          ticketOwnerId: inactiveStaff.id,
+          version: 1,
+        },
+      });
+
+      try {
+        const res = await request(app)
+          .patch(`/api/staff/tickets/${ticket.id}/status`)
+          .set("Origin", allowedOrigin)
+          .set("Cookie", staffA.cookie)
+          .set("X-CSRF-Token", staffA.csrfToken)
+          .send({ currentStatus: "OPEN", expectedVersion: 1 });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toBe("OWNER_REQUIRED");
+      } finally {
+        await prisma.ticket.delete({ where: { id: ticket.id } });
+        await prisma.user.delete({ where: { id: inactiveStaff.id } });
       }
     });
   });

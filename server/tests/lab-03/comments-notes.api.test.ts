@@ -215,6 +215,62 @@ describe("P10: Communications & Requester Indication (T34–T38 / AC-34–AC-38 
 
     expect(invalidRes.status).toBe(400);
     expect(invalidRes.body.error).toBe("INVALID_TRANSITION");
+
+    // 6. Concurrent appears-resolved calls increment version exactly once (1 -> 2) and return 200
+    const concurrentTicket = await prisma.ticket.create({
+      data: {
+        ticketNumber: `TKT-2026-${Math.floor(100000 + Math.random() * 900000)}`,
+        summary: "Concurrent resolution indication",
+        description: "Both calls arrive at once",
+        categoryId,
+        relatedSystemId,
+        requestedPriority: "LOW",
+        itPriority: "LOW",
+        currentStatus: "OPEN",
+        requesterId: requesterSession.id,
+        version: 1,
+      },
+    });
+    createdTicketIds.push(concurrentTicket.id);
+
+    const [cRes1, cRes2] = await Promise.all([
+      request(app)
+        .post(`/api/tickets/${concurrentTicket.id}/appears-resolved`)
+        .set("Origin", allowedOrigin)
+        .set("Cookie", requesterSession.cookie)
+        .set("X-CSRF-Token", requesterSession.csrfToken),
+      request(app)
+        .post(`/api/tickets/${concurrentTicket.id}/appears-resolved`)
+        .set("Origin", allowedOrigin)
+        .set("Cookie", requesterSession.cookie)
+        .set("X-CSRF-Token", requesterSession.csrfToken),
+    ]);
+
+    expect(cRes1.status).toBe(200);
+    expect(cRes2.status).toBe(200);
+    expect(cRes1.body.version).toBe(2);
+    expect(cRes2.body.version).toBe(2);
+
+    const freshTicket = await prisma.ticket.findUnique({ where: { id: concurrentTicket.id } });
+    expect(freshTicket?.version).toBe(2);
+    expect(freshTicket?.appearsResolvedAt).toBeTruthy();
+  });
+
+  it("loadTicketForAccess middleware returns 500 on database errors instead of hanging request", async () => {
+    const prisma = getPrisma();
+    const originalFindUnique = prisma.ticket.findUnique;
+    (prisma.ticket as any).findUnique = () => Promise.reject(new Error("Simulated DB connection failure"));
+
+    try {
+      const res = await request(app)
+        .get("/api/tickets/99999/comments")
+        .set("Cookie", staffSession.cookie);
+
+      expect(res.status).toBe(500);
+      expect(res.body.error).toBe("INTERNAL_ERROR");
+    } finally {
+      (prisma.ticket as any).findUnique = originalFindUnique;
+    }
   });
 
   // T35 / AC-35: Public Comments Access & Creation

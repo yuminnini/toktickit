@@ -462,13 +462,44 @@ staffRouter.post("/tickets/:id/claim", requireRole("IT_STAFF"), async (req: Requ
         };
       }
 
-      const updated = await tx.ticket.update({
-        where: { id: ticketId },
+      const updateResult = await tx.ticket.updateMany({
+        where: {
+          id: ticketId,
+          version: expectedVersion,
+          ticketOwnerId: null,
+        },
         data: {
           ticketOwnerId: req.user!.id,
           version: { increment: 1 },
           updatedAt: new Date(),
         },
+      });
+
+      if (updateResult.count === 0) {
+        const fresh = await tx.ticket.findUnique({ where: { id: ticketId } });
+        if (!fresh) {
+          return { status: 404, data: { error: "NOT_FOUND", message: "Ticket not found" } };
+        }
+        if (fresh.ticketOwnerId !== null) {
+          return {
+            status: 409,
+            data: {
+              error: "ALREADY_CLAIMED",
+              message: "Ticket is already assigned to an owner.",
+            },
+          };
+        }
+        return {
+          status: 409,
+          data: {
+            error: "VERSION_CONFLICT",
+            message: "Ticket version conflict. Please refresh and try again.",
+          },
+        };
+      }
+
+      const updated = await tx.ticket.findUniqueOrThrow({
+        where: { id: ticketId },
         include: {
           requester: { select: { id: true, name: true, email: true } },
           category: { select: { id: true, name: true } },
@@ -564,13 +595,34 @@ staffRouter.patch("/tickets/:id/owner", requireRole("IT_STAFF"), async (req: Req
         return { status: 200, data: formatStaffTicketDetail(ticket) };
       }
 
-      const updated = await tx.ticket.update({
-        where: { id: ticketId },
+      const updateResult = await tx.ticket.updateMany({
+        where: {
+          id: ticketId,
+          version: expectedVersion,
+        },
         data: {
           ticketOwnerId,
           version: { increment: 1 },
           updatedAt: new Date(),
         },
+      });
+
+      if (updateResult.count === 0) {
+        const fresh = await tx.ticket.findUnique({ where: { id: ticketId } });
+        if (!fresh) {
+          return { status: 404, data: { error: "NOT_FOUND", message: "Ticket not found" } };
+        }
+        return {
+          status: 409,
+          data: {
+            error: "VERSION_CONFLICT",
+            message: "Ticket version conflict. Please refresh and try again.",
+          },
+        };
+      }
+
+      const updated = await tx.ticket.findUniqueOrThrow({
+        where: { id: ticketId },
         include: {
           requester: { select: { id: true, name: true, email: true } },
           category: { select: { id: true, name: true } },
@@ -652,13 +704,34 @@ staffRouter.patch("/tickets/:id/priority", requireRole("IT_STAFF"), async (req: 
         return { status: 200, data: formatStaffTicketDetail(ticket) };
       }
 
-      const updated = await tx.ticket.update({
-        where: { id: ticketId },
+      const updateResult = await tx.ticket.updateMany({
+        where: {
+          id: ticketId,
+          version: expectedVersion,
+        },
         data: {
           itPriority,
           version: { increment: 1 },
           updatedAt: new Date(),
         },
+      });
+
+      if (updateResult.count === 0) {
+        const fresh = await tx.ticket.findUnique({ where: { id: ticketId } });
+        if (!fresh) {
+          return { status: 404, data: { error: "NOT_FOUND", message: "Ticket not found" } };
+        }
+        return {
+          status: 409,
+          data: {
+            error: "VERSION_CONFLICT",
+            message: "Ticket version conflict. Please refresh and try again.",
+          },
+        };
+      }
+
+      const updated = await tx.ticket.findUniqueOrThrow({
+        where: { id: ticketId },
         include: {
           requester: { select: { id: true, name: true, email: true } },
           category: { select: { id: true, name: true } },
@@ -714,7 +787,7 @@ staffRouter.patch("/tickets/:id/status", requireRole("IT_STAFF"), async (req: Re
           requester: { select: { id: true, name: true, email: true } },
           category: { select: { id: true, name: true } },
           relatedSystem: { select: { id: true, name: true } },
-          ticketOwner: { select: { id: true, name: true } },
+          ticketOwner: { select: { id: true, name: true, active: true, role: true } },
           appearsResolvedBy: { select: { id: true, name: true } },
           attachments: true,
         },
@@ -747,21 +820,26 @@ staffRouter.patch("/tickets/:id/status", requireRole("IT_STAFF"), async (req: Re
         };
       }
 
-      // Eligible owner precondition: target OPEN, IN_PROGRESS, WAITING_FOR_REQUESTER, RESOLVED requires owner
+      // Eligible owner precondition: target OPEN, IN_PROGRESS, WAITING_FOR_REQUESTER, RESOLVED requires active Staff or Admin owner
       if (statusesRequiringOwner.includes(currentStatus)) {
-        if (!ticket.ticketOwnerId) {
+        if (
+          !ticket.ticketOwnerId ||
+          !ticket.ticketOwner ||
+          !ticket.ticketOwner.active ||
+          !["IT_STAFF", "ADMINISTRATOR"].includes(ticket.ticketOwner.role)
+        ) {
           return {
             status: 400,
             data: {
               error: "OWNER_REQUIRED",
-              message: `Ticket must have an assigned owner before transitioning to ${currentStatus}`,
+              message: `Ticket must have an assigned eligible owner (active IT Staff or Administrator) before transitioning to ${currentStatus}`,
             },
           };
         }
       }
 
       // BR-19: entering REOPENED clears appearsResolvedAt/ById; other transitions preserve it
-      const updateData: Prisma.TicketUpdateInput = {
+      const updateData: Prisma.TicketUncheckedUpdateManyInput = {
         currentStatus,
         version: { increment: 1 },
         updatedAt: new Date(),
@@ -769,12 +847,33 @@ staffRouter.patch("/tickets/:id/status", requireRole("IT_STAFF"), async (req: Re
 
       if (currentStatus === "REOPENED") {
         updateData.appearsResolvedAt = null;
-        updateData.appearsResolvedBy = { disconnect: true };
+        updateData.appearsResolvedById = null;
       }
 
-      const updated = await tx.ticket.update({
-        where: { id: ticketId },
+      const updateResult = await tx.ticket.updateMany({
+        where: {
+          id: ticketId,
+          version: expectedVersion,
+        },
         data: updateData,
+      });
+
+      if (updateResult.count === 0) {
+        const fresh = await tx.ticket.findUnique({ where: { id: ticketId } });
+        if (!fresh) {
+          return { status: 404, data: { error: "NOT_FOUND", message: "Ticket not found" } };
+        }
+        return {
+          status: 409,
+          data: {
+            error: "VERSION_CONFLICT",
+            message: "Ticket version conflict. Please refresh and try again.",
+          },
+        };
+      }
+
+      const updated = await tx.ticket.findUniqueOrThrow({
+        where: { id: ticketId },
         include: {
           requester: { select: { id: true, name: true, email: true } },
           category: { select: { id: true, name: true } },

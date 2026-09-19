@@ -19,27 +19,32 @@ const ALLOWED_APPEARS_RESOLVED_STATUSES: TicketStatus[] = [
  * Middleware to check ticket existence and ownership for communications
  */
 async function loadTicketForAccess(req: Request, res: Response, next: NextFunction) {
-  const ticketId = Number(req.params.id);
-  if (!Number.isInteger(ticketId) || ticketId <= 0) {
-    return res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
+  try {
+    const ticketId = Number(req.params.id);
+    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
+    }
+
+    // Non-disclosure: Requesters can only access their own tickets
+    if (req.user!.role === "REQUESTER" && ticket.requesterId !== req.user!.id) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
+    }
+
+    (req as any).targetTicket = ticket;
+    return next();
+  } catch (err) {
+    console.error("loadTicketForAccess error:", err);
+    return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to access ticket" });
   }
-
-  const prisma = getPrisma();
-  const ticket = await prisma.ticket.findUnique({
-    where: { id: ticketId },
-  });
-
-  if (!ticket) {
-    return res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
-  }
-
-  // Non-disclosure: Requesters can only access their own tickets
-  if (req.user!.role === "REQUESTER" && ticket.requesterId !== req.user!.id) {
-    return res.status(404).json({ error: "NOT_FOUND", message: "Ticket not found" });
-  }
-
-  (req as any).targetTicket = ticket;
-  return next();
 }
 
 /**
@@ -272,6 +277,11 @@ communicationsRouter.post("/:id/appears-resolved", async (req: Request, res: Res
         return { notFound: true as const };
       }
 
+      // Idempotent: if already indicated, return current state without version increment
+      if (freshTicket.appearsResolvedAt !== null) {
+        return { ticket: freshTicket };
+      }
+
       if (!ALLOWED_APPEARS_RESOLVED_STATUSES.includes(freshTicket.currentStatus)) {
         return {
           invalidTransition: true as const,
@@ -279,21 +289,49 @@ communicationsRouter.post("/:id/appears-resolved", async (req: Request, res: Res
         };
       }
 
-      // Idempotent: if already indicated, return current state without version increment
-      if (freshTicket.appearsResolvedAt !== null) {
-        return { ticket: freshTicket };
-      }
-
-      const updated = await tx.ticket.update({
-        where: { id: freshTicket.id },
+      const now = new Date();
+      const updateResult = await tx.ticket.updateMany({
+        where: {
+          id: ticketId,
+          appearsResolvedAt: null,
+          currentStatus: { in: ALLOWED_APPEARS_RESOLVED_STATUSES },
+        },
         data: {
-          appearsResolvedAt: new Date(),
+          appearsResolvedAt: now,
           appearsResolvedById: req.user!.id,
           version: { increment: 1 },
         },
       });
 
-      return { ticket: updated };
+      if (updateResult.count === 0) {
+        // Race condition: another request set appearsResolvedAt or changed status
+        const recheck = await tx.ticket.findUnique({
+          where: { id: ticketId },
+        });
+
+        if (!recheck) {
+          return { notFound: true as const };
+        }
+
+        // If another concurrent request indicated resolution, return it idempotently
+        if (recheck.appearsResolvedAt !== null) {
+          return { ticket: recheck };
+        }
+
+        // If status transitioned to a disallowed status concurrently
+        if (!ALLOWED_APPEARS_RESOLVED_STATUSES.includes(recheck.currentStatus)) {
+          return {
+            invalidTransition: true as const,
+            status: recheck.currentStatus,
+          };
+        }
+      }
+
+      const finalTicket = await tx.ticket.findUniqueOrThrow({
+        where: { id: ticketId },
+      });
+
+      return { ticket: finalTicket };
     });
 
     if ("notFound" in result) {
