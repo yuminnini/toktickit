@@ -258,7 +258,12 @@ adminRouter.patch("/users/:id", async (req: Request, res: Response, next: NextFu
     // Atomic transaction for validations and mutations
     const result = await prisma.$transaction(async (tx) => {
       // Consistent lock order: User -> Ticket
-      // Lock target user first to serialize concurrent deactivations/role changes with ticket reassignments
+      // Use transaction-level advisory lock to serialize user management mutations
+      // and eliminate deadlock cycles between concurrent admin updates and invariant checks,
+      // followed by row-level lock on target user.
+      if (typeof tx.$executeRaw === "function") {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('toktickit:admin_user_mutation')::bigint)`;
+      }
       if (typeof tx.$queryRaw === "function") {
         await tx.$queryRaw`SELECT id FROM "RequesterUser" WHERE id = ${targetId} FOR UPDATE`;
       }
@@ -292,9 +297,6 @@ adminRouter.patch("/users/:id", async (req: Request, res: Response, next: NextFu
         targetUser.active &&
         (willBeInactive || willChangeRole)
       ) {
-        // Explicitly lock active administrator rows with FOR UPDATE to serialize concurrent deactivations
-        await tx.$queryRaw`SELECT id FROM "RequesterUser" WHERE role = 'ADMINISTRATOR'::"Role" AND active = true FOR UPDATE`;
-
         const activeAdminCount = await tx.user.count({
           where: { role: "ADMINISTRATOR", active: true },
         });

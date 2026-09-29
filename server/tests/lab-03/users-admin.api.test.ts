@@ -446,22 +446,67 @@ describe("P11: Administrator User Management API (T40–T48 / AC-40–AC-48)", (
         testUserIdsToClean.push(secondAdmin.id);
         const secondSession = await getAuthSessionForUser(secondAdmin.id);
 
-        // Both admins race to deactivate each other simultaneously
-        const [res1, res2] = await Promise.all([
+        // Both admins race to deactivate each other simultaneously.
+        // Hold the advisory lock momentarily so both requests authenticate and queue at the lock
+        let releaseGate!: () => void;
+        let lockAcquired!: () => void;
+        const lockAcquiredPromise = new Promise<void>((resolve) => {
+          lockAcquired = resolve;
+        });
+        const gatePromise = new Promise<void>((resolve) => {
+          releaseGate = resolve;
+        });
+
+        const holdPromise = prisma.$transaction(
+          async (tx) => {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('toktickit:admin_user_mutation')::bigint)`;
+            lockAcquired();
+            await gatePromise;
+          },
+          { timeout: 10000 }
+        );
+
+        await lockAcquiredPromise;
+
+        // Start both requests eagerly so they execute HTTP parsing and authenticate
+        const req1Promise = new Promise<request.Response>((resolve, reject) => {
           request(app)
             .patch(`/api/admin/users/${secondAdmin.id}`)
             .set("Origin", allowedOrigin)
             .set("Cookie", adminSession.cookie)
             .set("X-CSRF-Token", adminSession.csrfToken)
-            .send({ active: false }),
+            .send({ active: false })
+            .end((err, res) => (err ? reject(err) : resolve(res)));
+        });
+
+        const req2Promise = new Promise<request.Response>((resolve, reject) => {
           request(app)
             .patch(`/api/admin/users/${adminSession.id}`)
             .set("Origin", allowedOrigin)
             .set("Cookie", secondSession.cookie)
             .set("X-CSRF-Token", secondSession.csrfToken)
-            .send({ active: false }),
-        ]);
+            .send({ active: false })
+            .end((err, res) => (err ? reject(err) : resolve(res)));
+        });
 
+        // Wait until both requests have authenticated and are queued on the advisory lock in PostgreSQL
+        for (let i = 0; i < 50; i++) {
+          const [{ count }] = await prisma.$queryRaw<[{ count: number }]>`
+            SELECT count(*)::int as count FROM pg_locks WHERE locktype = 'advisory' AND granted = false
+          `;
+          if (count >= 2) break;
+          await new Promise((r) => setTimeout(r, 20));
+        }
+
+        // Release the advisory lock so both transactions race deterministically
+        releaseGate();
+        await holdPromise;
+
+        const [res1, res2] = await Promise.all([req1Promise, req2Promise]);
+
+        // Invariant: No 500 error from deadlock; one succeeds (200) and the other is rejected (400 LAST_ACTIVE_ADMIN)
+        expect(res1.status).not.toBe(500);
+        expect(res2.status).not.toBe(500);
         const statuses = [res1.status, res2.status].sort();
         expect(statuses).toEqual([200, 400]);
 

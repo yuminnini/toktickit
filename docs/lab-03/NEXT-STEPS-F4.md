@@ -47,13 +47,17 @@
   - ตรวจสอบ `scrollWidth <= clientWidth` ปราศจากข้อผิดพลาดข้อความล้นหรือตกขอบ
   - บันทึกภาพหลักฐานจริง 32 ภาพ (ขนาด >10KB ทุกไฟล์) ภายใต้ไดเรกทอรี `artifacts/lab-03/screenshots/run-2026-09-19T12-16-03-181Z/` โดยคงไฟล์ประวัติเดิมของ Lab 2 ไว้อย่างครบถ้วน (16/16 tests passed)
 
-### 1.3 การแก้ไขตามข้อเสนอแนะจาก Peer Review (P1 & P2 Fixes)
-- **[P1] ป้องกัน Race Condition เมื่อปิดบัญชี/เปลี่ยน Role กับการมอบหมายตั๋ว (Server):**
-  - **Lock Order สอดคล้องทั่วทั้งระบบ (`User -> Ticket`):** ป้องกัน Deadlock และตัดวงจร Race Condition โดยทุก Transaction ที่แตะทั้ง User และ Ticket จะต้องล็อกแถว User ด้วย `FOR UPDATE` ก่อนล็อกหรืออัปเดต Ticket เสมอ
-  - **`server/src/routes/admin.ts`:** เพิ่ม `tx.$queryRaw` สั่ง `SELECT id FROM "RequesterUser" WHERE id = ${targetId} FOR UPDATE` ก่อนประเมิน Invariant และ Unassign ตั๋ว
+### 1.3 การแก้ไขตามข้อเสนอแนะจาก Peer Review (P1, P2 & Deadlock Elimination)
+- **[P1] ป้องกัน Race Condition และ Deadlock เมื่อปิดบัญชี/เปลี่ยน Role พร้อมกัน (Server):**
+  - **Deadlock Cycle Resolution ด้วย Transaction-Level Advisory Lock:** จากข้อสังเกตของ Peer Reviewer ที่พบว่าหากแอดมิน 2 คนสั่งปิดบัญชีซึ่งกันและกันพร้อมกัน คำขอที่ 1 จะล็อกบัญชี B แล้วพยายามล็อกแอดมินทั้งหมด ขณะที่คำขอที่ 2 ล็อกบัญชี A แล้วพยายามล็อกแอดมินทั้งหมด เกิด Cyclic Dependency จน PostgreSQL ตรวจพบ Deadlock และส่งคืน 500 Internal Server Error
+  - **การแก้ไข:** ใช้ Transaction-Level Advisory Lock (`SELECT pg_advisory_xact_lock(hashtext('toktickit:admin_user_mutation')::bigint)`) ที่จุดเริ่มต้นของ Transaction ใน `server/src/routes/admin.ts` ก่อนทำการล็อก Target User เพื่อจัดลำดับการทำงาน (Lock Ordering) ให้เป็นไปในทิศทางเดียวกันทุกคำขอ และตัดการล็อกซ้ำซ้อนระดับแถวของแอดมินทั้งหมดออก
+  - **Lock Order สอดคล้องทั่วทั้งระบบ (`Advisory Lock -> User -> Ticket`):** ป้องกัน Deadlock และตัดวงจร Race Condition โดยทุก Transaction ที่แตะทั้ง User และ Ticket จะต้องปฏิบัติตามลำดับการล็อกเดียวกันอย่างเคร่งครัด
+  - **`server/src/routes/admin.ts`:** เรียก Advisory Lock ก่อน ตามด้วย `SELECT id FROM "RequesterUser" WHERE id = ${targetId} FOR UPDATE` ก่อนประเมิน Invariant และ Unassign ตั๋ว
   - **`server/src/routes/staff.ts` (`/owner`):** ย้ายการตรวจสอบความถูกต้องและสถานะ Active ของ Candidate Owner เข้าไปอยู่ภายใน Transaction พร้อมสั่ง `SELECT ... FOR UPDATE` บน Candidate User ก่อน
   - **`server/src/routes/staff.ts` (`/claim`):** ตรวจสอบและล็อก User ตนเอง (`req.user.id`) ด้วย `FOR UPDATE` ใน Transaction เพื่อให้มั่นใจว่ายัง Active และมีสิทธิ์ IT Staff/Admin
-  - **ชุดทดสอบ (`server/tests/lab-03/users-admin.api.test.ts`):** เพิ่ม 3 Test Cases ตรวจสอบการปฏิเสธการมอบหมายตั๋วให้ Staff ที่ Inactive (400), ปฏิเสธการ Claim จาก Inactive Staff (401/403), และจำลอง Concurrent Admin Deactivation vs Staff Assignment ยืนยัน Invariant ว่าตั๋วจะไม่มีทางตกค้างอยู่กับผู้ใช้ที่ `active = false` (รวมผ่าน 170/170 tests)
+  - **ชุดทดสอบ (`server/tests/lab-03/users-admin.api.test.ts`):** 
+    - เพิ่มการทดสอบจำลองแอดมิน 2 คนสั่งปิดบัญชีซึ่งกันและกันพร้อมกัน (Concurrent Mutual Admin Deactivation) โดยใช้ Advisory Lock Gate ร่วมกับ `pg_locks` เพื่อให้มั่นใจว่าทั้งสองคำขอเข้าสู่ Transaction พร้อมกัน และยืนยันผลลัพธ์เป็น **200 (สำเร็จ) / 400 LAST_ACTIVE_ADMIN โดยไม่มี 500 เกิดขึ้นอย่างเด็ดขาด** (ผ่านฉลุย 100%)
+    - เพิ่มการตรวจสอบการปฏิเสธการมอบหมายตั๋วให้ Staff ที่ Inactive (400), ปฏิเสธการ Claim จาก Inactive Staff (401/403), และจำลอง Concurrent Admin Deactivation vs Staff Assignment ยืนยัน Invariant ว่าตั๋วจะไม่มีทางตกค้างอยู่กับผู้ใช้ที่ `active = false` (รวมผ่าน 170/170 tests)
 - **[P2] ซิงค์ AuthContext และนำทางไปหน้า Login เมื่อแก้ไขบทบาทหรือรีเซ็ตรหัสผ่านตนเอง (Client):**
   - **`client/src/pages/AdminUsersPage.tsx`:** เมื่อ Admin เปลี่ยน Role ตนเอง หรือ Reset รหัสผ่านตนเอง ซึ่ง Backend ทำการเพิกถอน Session ทันที (`BR-12 / AC-47`) Frontend จะเรียก `refreshUser()` ซิงค์เคลียร์ `user = null` และ CSRF token ใน `AuthContext` ทันที จากนั้นสั่ง `navigate("/login", { replace: true, state: { message: "..." } })`
   - **`client/src/pages/AdminUsersPage.tsx` (`loadUsers`):** ดักจับ Error 401 เพื่อเรียก `refreshUser()` ป้องกันหน้าค้างในสถานะมี User อยู่ใน Client State
