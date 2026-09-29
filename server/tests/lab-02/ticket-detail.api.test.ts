@@ -4,6 +4,7 @@ import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
 import { formatTicketNumber } from "../../src/services/ticketNumber.js";
 import { Priority, TicketStatus } from "@prisma/client";
+import { getAuthCookieForUser } from "../helpers/auth.js";
 
 describe("GET /api/tickets/:id (API-02, BR-13, AC-03)", () => {
   let requesterAId: number;
@@ -11,15 +12,18 @@ describe("GET /api/tickets/:id (API-02, BR-13, AC-03)", () => {
   let inactiveRequesterId: number;
   let ticketAId: number;
   let ticketANumber: string;
+  let cookieA: string;
+  let cookieB: string;
+  let inactiveCookie: string;
 
   beforeAll(async () => {
     const prisma = getPrisma();
-    const requesters = await prisma.requesterUser.findMany({
-      where: { active: true },
+    const requesters = await prisma.user.findMany({
+      where: { role: "REQUESTER", active: true, mustChangePassword: false },
       take: 2,
     });
-    const inactiveReq = await prisma.requesterUser.findFirst({
-      where: { active: false },
+    const inactiveReq = await prisma.user.findFirst({
+      where: { role: "REQUESTER", active: false },
     });
     const category = await prisma.category.findFirst();
     const system = await prisma.relatedSystem.findFirst({ where: { active: true } });
@@ -32,6 +36,10 @@ describe("GET /api/tickets/:id (API-02, BR-13, AC-03)", () => {
     requesterBId = requesters[1].id;
     inactiveRequesterId = inactiveReq.id;
 
+    cookieA = await getAuthCookieForUser(requesterAId);
+    cookieB = await getAuthCookieForUser(requesterBId);
+    inactiveCookie = await getAuthCookieForUser(inactiveRequesterId);
+
     // Create a ticket for Requester A
     const t = await prisma.ticket.create({
       data: {
@@ -42,6 +50,7 @@ describe("GET /api/tickets/:id (API-02, BR-13, AC-03)", () => {
         summary: "Detailed investigation needed for VPN",
         description: "Cannot connect to VPN from home office since Monday.",
         requestedPriority: Priority.HIGH,
+        itPriority: Priority.HIGH,
         currentStatus: TicketStatus.NEW,
       },
     });
@@ -64,7 +73,7 @@ describe("GET /api/tickets/:id (API-02, BR-13, AC-03)", () => {
   it("returns 200 with full ticket details when accessed by owner", async () => {
     const res = await request(app)
       .get(`/api/tickets/${ticketAId}`)
-      .query({ requesterId: requesterAId });
+      .set("Cookie", cookieA);
 
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(ticketAId);
@@ -81,7 +90,7 @@ describe("GET /api/tickets/:id (API-02, BR-13, AC-03)", () => {
   it("API-02 / AC-03, BR-13: returns 404 when accessed by a requester who does not own it", async () => {
     const res = await request(app)
       .get(`/api/tickets/${ticketAId}`)
-      .query({ requesterId: requesterBId });
+      .set("Cookie", cookieB);
 
     expect(res.status).toBe(404);
     expect(res.body.error).toBe("NOT_FOUND");
@@ -92,25 +101,25 @@ describe("GET /api/tickets/:id (API-02, BR-13, AC-03)", () => {
   it("returns 404 when ticket ID does not exist", async () => {
     const res = await request(app)
       .get("/api/tickets/999999")
-      .query({ requesterId: requesterAId });
+      .set("Cookie", cookieA);
 
     expect(res.status).toBe(404);
     expect(res.body.error).toBe("NOT_FOUND");
   });
 
-  it("returns 400 when requesterId is missing", async () => {
+  it("returns 401 when session is missing", async () => {
     const res = await request(app).get(`/api/tickets/${ticketAId}`);
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("MISSING_REQUESTER");
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe("UNAUTHENTICATED");
   });
 
-  it("returns 400 when requesterId belongs to inactive requester", async () => {
+  it("returns 401 when session belongs to inactive requester", async () => {
     const res = await request(app)
       .get(`/api/tickets/${ticketAId}`)
-      .query({ requesterId: inactiveRequesterId });
+      .set("Cookie", inactiveCookie);
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("BAD_REQUESTER");
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe("UNAUTHENTICATED");
   });
 });

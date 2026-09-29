@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { AuthContext } from "./AuthContext";
 
 export interface Requester {
     id: number;
@@ -37,6 +38,7 @@ function loadFromStorage(): Requester | null {
 
 export function RequesterProvider({ children }: { children: ReactNode }) {
     const [requester, setRequesterState] = useState<Requester | null>(loadFromStorage);
+    const auth = useContext(AuthContext);
 
     const setRequester = useCallback((r: Requester) => {
         sessionStorage.setItem(STORAGE_KEY, JSON.stringify(r));
@@ -48,8 +50,12 @@ export function RequesterProvider({ children }: { children: ReactNode }) {
         setRequesterState(null);
     }, []);
 
+    const effectiveRequester = auth?.user
+        ? { id: auth.user.id, name: auth.user.name }
+        : requester;
+
     return (
-        <RequesterContext.Provider value={{ requester, setRequester, clearRequester }}>
+        <RequesterContext.Provider value={{ requester: effectiveRequester, setRequester, clearRequester }}>
             {children}
         </RequesterContext.Provider>
     );
@@ -57,6 +63,12 @@ export function RequesterProvider({ children }: { children: ReactNode }) {
 
 export function useRequester(): RequesterContextValue {
     const ctx = useContext(RequesterContext);
-    if (!ctx) throw new Error("useRequester must be used within a RequesterProvider");
+    if (!ctx) {
+        return {
+            requester: null,
+            setRequester: () => {},
+            clearRequester: () => {},
+        };
+    }
     return ctx;
 }

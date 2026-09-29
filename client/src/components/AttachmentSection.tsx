@@ -148,7 +148,7 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
     setDownloadError(null);
     try {
       const url = getAttachmentDownloadUrl(att.id, requesterId);
-      const res = await fetch(url);
+      const res = await fetch(url, { credentials: "include" });
       if (res.status === 404) {
         setDownloadError("This file is no longer available.");
         return;

@@ -16,7 +16,159 @@ export interface Requester {
 }
 
 export type PriorityType = "LOW" | "MEDIUM" | "HIGH";
-export type TicketStatusType = "NEW" | "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
+export type TicketStatusType =
+  | "NEW"
+  | "OPEN"
+  | "IN_PROGRESS"
+  | "RESOLVED"
+  | "CLOSED"
+  | "WAITING_FOR_REQUESTER"
+  | "REOPENED"
+  | "CANCELLED";
+
+export type RoleType = "REQUESTER" | "IT_STAFF" | "ADMINISTRATOR";
+
+export interface SafeUser {
+  id: number;
+  name: string;
+  email: string;
+  role: RoleType;
+  active: boolean;
+  mustChangePassword: boolean;
+}
+
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+let cachedCsrfToken: string | null = null;
+
+export function setCachedCsrfToken(token: string | null) {
+  cachedCsrfToken = token;
+}
+
+export function getCachedCsrfToken(): string | null {
+  return cachedCsrfToken;
+}
+
+export async function fetchCsrfToken(): Promise<string> {
+  const res = await fetch(`${API_URL}/api/auth/csrf`, {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new Error("Unable to fetch CSRF token");
+  }
+  const data = await res.json();
+  cachedCsrfToken = data.csrfToken;
+  return data.csrfToken;
+}
+
+export async function loginApi(credentials: LoginCredentials): Promise<{ user: SafeUser }> {
+  const res = await fetch(`${API_URL}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(credentials),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Invalid email or password") as Error & {
+      code?: string;
+      status?: number;
+      retryAfter?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    const retryHeader = res.headers.get("Retry-After");
+    if (retryHeader) {
+      error.retryAfter = parseInt(retryHeader, 10);
+    }
+    throw error;
+  }
+  return data;
+}
+
+export async function getCurrentUserApi(): Promise<SafeUser | null> {
+  const res = await fetch(`${API_URL}/api/auth/me`, {
+    credentials: "include",
+  });
+  if (res.status === 401) {
+    return null;
+  }
+  if (!res.ok) {
+    throw new Error("Unable to load current user");
+  }
+  const data = await res.json();
+  return data.user;
+}
+
+export async function logoutApi(): Promise<void> {
+  let token = cachedCsrfToken;
+  if (!token) {
+    try {
+      token = await fetchCsrfToken();
+    } catch {
+      // proceed if token cannot be fetched
+    }
+  }
+
+  const res = await fetch(`${API_URL}/api/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      ...(token ? { "X-CSRF-Token": token } : {}),
+    },
+  });
+
+  cachedCsrfToken = null;
+  if (!res.ok && res.status !== 401) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || "Logout failed");
+  }
+}
+
+export async function changePasswordApi(input: ChangePasswordInput): Promise<{ user: SafeUser }> {
+  let token = cachedCsrfToken;
+  if (!token) {
+    token = await fetchCsrfToken();
+  }
+
+  const res = await fetch(`${API_URL}/api/auth/change-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { "X-CSRF-Token": token } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Password change failed") as Error & {
+      code?: string;
+      status?: number;
+      fields?: Record<string, string>;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    error.fields = data.fields;
+    throw error;
+  }
+
+  // After password change, session and CSRF token rotate
+  await fetchCsrfToken().catch(() => {});
+
+  return data;
+}
 
 export interface SystemStatus {
   online: boolean;
@@ -50,7 +202,7 @@ export interface TicketItem {
 export async function checkSystem(): Promise<SystemStatus> {
   let healthRes: Response;
   try {
-    healthRes = await fetch(`${API_URL}/api/health`);
+    healthRes = await fetch(`${API_URL}/api/health`, { credentials: "include" });
   } catch {
     throw new Error("Unable to connect to TokTickIT API");
   }
@@ -60,7 +212,7 @@ export async function checkSystem(): Promise<SystemStatus> {
 
   let categoriesRes: Response;
   try {
-    categoriesRes = await fetch(`${API_URL}/api/categories`);
+    categoriesRes = await fetch(`${API_URL}/api/categories`, { credentials: "include" });
   } catch {
     throw new Error("Unable to connect to TokTickIT API");
   }
@@ -73,7 +225,7 @@ export async function checkSystem(): Promise<SystemStatus> {
 }
 
 export async function fetchRequesters(): Promise<Requester[]> {
-  const res = await fetch(`${API_URL}/api/requesters`);
+  const res = await fetch(`${API_URL}/api/requesters`, { credentials: "include" });
   if (!res.ok) {
     throw new Error("Unable to load requesters");
   }
@@ -81,7 +233,7 @@ export async function fetchRequesters(): Promise<Requester[]> {
 }
 
 export async function fetchRelatedSystems(): Promise<RelatedSystem[]> {
-  const res = await fetch(`${API_URL}/api/related-systems`);
+  const res = await fetch(`${API_URL}/api/related-systems`, { credentials: "include" });
   if (!res.ok) {
     throw new Error("Unable to load related systems");
   }
@@ -89,7 +241,7 @@ export async function fetchRelatedSystems(): Promise<RelatedSystem[]> {
 }
 
 export async function fetchCategories(): Promise<Category[]> {
-  const res = await fetch(`${API_URL}/api/categories`);
+  const res = await fetch(`${API_URL}/api/categories`, { credentials: "include" });
   if (!res.ok) {
     throw new Error("Unable to load categories");
   }
@@ -97,9 +249,20 @@ export async function fetchCategories(): Promise<Category[]> {
 }
 
 export async function createTicket(input: TicketInput): Promise<TicketItem> {
+  let token = cachedCsrfToken;
+  if (!token) {
+    try {
+      token = await fetchCsrfToken();
+    } catch {}
+  }
+
   const res = await fetch(`${API_URL}/api/tickets`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { "X-CSRF-Token": token } : {}),
+    },
+    credentials: "include",
     body: JSON.stringify(input),
   });
 
@@ -155,6 +318,9 @@ export interface TicketDetail {
   currentStatus: TicketStatusType;
   createdAt: string;
   attachments: AttachmentItem[];
+  appearsResolvedAt?: string | null;
+  appearsResolvedById?: number | null;
+  version?: number;
 }
 
 export interface GetTicketsParams {
@@ -184,7 +350,10 @@ export async function fetchTickets(
   if (params.page) query.set("page", String(params.page));
   if (params.pageSize) query.set("pageSize", String(params.pageSize));
 
-  const res = await fetch(`${API_URL}/api/tickets?${query.toString()}`, { signal });
+  const res = await fetch(`${API_URL}/api/tickets?${query.toString()}`, {
+    signal,
+    credentials: "include",
+  });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.message || "Unable to load tickets");
@@ -197,7 +366,10 @@ export async function fetchTicketDetail(
   requesterId: number,
   signal?: AbortSignal
 ): Promise<TicketDetail> {
-  const res = await fetch(`${API_URL}/api/tickets/${id}?requesterId=${requesterId}`, { signal });
+  const res = await fetch(`${API_URL}/api/tickets/${id}?requesterId=${requesterId}`, {
+    signal,
+    credentials: "include",
+  });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     const err = new Error(data.message || "Unable to load ticket detail") as Error & { status?: number };
@@ -212,6 +384,13 @@ export async function uploadAttachment(
   requesterId: number,
   file: File
 ): Promise<AttachmentItem> {
+  let token = cachedCsrfToken;
+  if (!token) {
+    try {
+      token = await fetchCsrfToken();
+    } catch {}
+  }
+
   const formData = new FormData();
   formData.append("file", file);
 
@@ -219,6 +398,10 @@ export async function uploadAttachment(
     `${API_URL}/api/tickets/${ticketId}/attachments?requesterId=${requesterId}`,
     {
       method: "POST",
+      headers: {
+        ...(token ? { "X-CSRF-Token": token } : {}),
+      },
+      credentials: "include",
       body: formData,
     }
   );
@@ -241,11 +424,22 @@ export async function removeAttachment(
   requesterId: number,
   reason: string
 ): Promise<AttachmentItem> {
+  let token = cachedCsrfToken;
+  if (!token) {
+    try {
+      token = await fetchCsrfToken();
+    } catch {}
+  }
+
   const res = await fetch(
     `${API_URL}/api/attachments/${attachmentId}?requesterId=${requesterId}`,
     {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { "X-CSRF-Token": token } : {}),
+      },
+      credentials: "include",
       body: JSON.stringify({ reason }),
     }
   );
@@ -263,6 +457,530 @@ export async function removeAttachment(
   return data;
 }
 
-export function getAttachmentDownloadUrl(attachmentId: number, requesterId: number): string {
-  return `${API_URL}/api/attachments/${attachmentId}/download?requesterId=${requesterId}`;
-}
+export function getAttachmentDownloadUrl(attachmentId: number, requesterId?: number): string {
+  return `${API_URL}/api/attachments/${attachmentId}/download${requesterId ? `?requesterId=${requesterId}` : ""}`;
+}
+
+// ---------------------------------------------------------------------------
+// P08, P09, P10: Staff Queue, Operations & Communications Interfaces & Methods
+// ---------------------------------------------------------------------------
+
+export interface StaffTicketItem {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  category: { id: number; name: string };
+  requestedPriority: PriorityType;
+  itPriority: PriorityType;
+  currentStatus: TicketStatusType;
+  ticketOwner: { id: number; name: string; email: string } | null;
+  updatedAt: string;
+}
+
+export interface StaffQueueParams {
+  search?: string;
+  categoryId?: number;
+  requestedPriority?: PriorityType;
+  itPriority?: PriorityType;
+  status?: TicketStatusType;
+  owner?: "all" | "unassigned" | "mine";
+  ticketOwnerId?: number;
+  sort?: "ticketNumber" | "updatedAt" | "requestedPriority" | "itPriority" | "currentStatus";
+  order?: "asc" | "desc";
+  page?: number;
+  pageSize?: number;
+}
+
+export interface StaffQueueResponse {
+  data: StaffTicketItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface StaffTicketDetail {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  description: string;
+  category: { id: number; name: string };
+  relatedSystem: { id: number; name: string };
+  requestedPriority: PriorityType;
+  itPriority: PriorityType;
+  currentStatus: TicketStatusType;
+  requester: { id: number; name: string; email: string };
+  ticketOwner: { id: number; name: string; email: string } | null;
+  version: number;
+  appearsResolvedAt: string | null;
+  appearsResolvedById: number | null;
+  createdAt: string;
+  updatedAt: string;
+  attachments: AttachmentItem[];
+}
+
+export interface EligibleOwner {
+  id: number;
+  name: string;
+  email: string;
+  role: RoleType;
+}
+
+export interface CommunicationEntry {
+  id: number;
+  ticketId: number;
+  content: string;
+  author: { id: number; name: string; role: RoleType };
+  createdAt: string;
+}
+
+async function getOrFetchCsrf(): Promise<string> {
+  if (!cachedCsrfToken) {
+    try {
+      await fetchCsrfToken();
+    } catch {}
+  }
+  return cachedCsrfToken || "";
+}
+
+export async function fetchStaffTickets(
+  params: StaffQueueParams,
+  signal?: AbortSignal
+): Promise<StaffQueueResponse> {
+  const query = new URLSearchParams();
+  if (params.search) query.set("search", params.search);
+  if (params.categoryId) query.set("categoryId", String(params.categoryId));
+  if (params.requestedPriority) query.set("requestedPriority", params.requestedPriority);
+  if (params.itPriority) query.set("itPriority", params.itPriority);
+  if (params.status) query.set("status", params.status);
+  if (params.owner) query.set("owner", params.owner);
+  if (params.ticketOwnerId) query.set("ticketOwnerId", String(params.ticketOwnerId));
+  if (params.sort) query.set("sort", params.sort);
+  if (params.order) query.set("order", params.order);
+  if (params.page) query.set("page", String(params.page));
+  if (params.pageSize) query.set("pageSize", String(params.pageSize));
+
+  const res = await fetch(`${API_URL}/api/staff/tickets?${query.toString()}`, {
+    signal,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const error = new Error(data.message || "Failed to load staff tickets") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+export async function fetchStaffTicketDetail(
+  id: number,
+  signal?: AbortSignal
+): Promise<StaffTicketDetail> {
+  const res = await fetch(`${API_URL}/api/staff/tickets/${id}`, {
+    signal,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const error = new Error(data.message || "Failed to load staff ticket detail") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+export async function fetchEligibleOwners(): Promise<EligibleOwner[]> {
+  const res = await fetch(`${API_URL}/api/staff/eligible-owners`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || "Failed to load eligible owners");
+  }
+  const result = await res.json();
+  return result.data;
+}
+
+export async function claimTicket(
+  id: number,
+  expectedVersion: number
+): Promise<StaffTicketDetail> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/staff/tickets/${id}/claim`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ expectedVersion }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to claim ticket") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export async function assignTicketOwner(
+  id: number,
+  ownerId: number,
+  expectedVersion: number
+): Promise<StaffTicketDetail> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/staff/tickets/${id}/owner`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ ownerId, expectedVersion }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to assign ticket owner") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export async function updateItPriority(
+  id: number,
+  itPriority: PriorityType,
+  expectedVersion: number
+): Promise<StaffTicketDetail> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/staff/tickets/${id}/priority`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ itPriority, expectedVersion }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to update IT priority") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export async function updateTicketStatus(
+  id: number,
+  currentStatus: TicketStatusType,
+  expectedVersion: number
+): Promise<StaffTicketDetail> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/staff/tickets/${id}/status`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ currentStatus, expectedVersion }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to update ticket status") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export async function fetchTicketComments(
+  ticketId: number,
+  signal?: AbortSignal
+): Promise<CommunicationEntry[]> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, {
+    signal,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const error = new Error(data.message || "Failed to load comments") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  const result = await res.json();
+  return result.data;
+}
+
+export async function createTicketComment(
+  ticketId: number,
+  content: string
+): Promise<CommunicationEntry> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ content }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to add comment") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export async function fetchTicketNotes(
+  ticketId: number,
+  signal?: AbortSignal
+): Promise<CommunicationEntry[]> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/internal-notes`, {
+    signal,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const error = new Error(data.message || "Failed to load internal notes") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  const result = await res.json();
+  return result.data;
+}
+
+export async function createTicketNote(
+  ticketId: number,
+  content: string
+): Promise<CommunicationEntry> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/internal-notes`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ content }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to add internal note") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export async function indicateAppearsResolved(
+  ticketId: number
+): Promise<{
+  id: number;
+  appearsResolvedAt: string;
+  appearsResolvedById: number;
+  currentStatus: TicketStatusType;
+  version: number;
+}> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/appears-resolved`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({}),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.message || "Failed to record resolution indication") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+export async function fetchUsersAdmin(
+  params?: { search?: string; role?: RoleType },
+  signal?: AbortSignal
+): Promise<SafeUser[]> {
+  const query = new URLSearchParams();
+  if (params?.search) query.set("search", params.search);
+  if (params?.role) query.set("role", params.role);
+  const qStr = query.toString();
+  const url = `${API_URL}/api/admin/users${qStr ? `?${qStr}` : ""}`;
+
+  const res = await fetch(url, {
+    signal,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const error = new Error(data.message || "Failed to load users") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = data.error;
+    error.status = res.status;
+    throw error;
+  }
+  const result = await res.json();
+  return result.data;
+}
+
+export async function createUserAdmin(data: {
+  name: string;
+  email: string;
+  role: RoleType;
+  active: boolean;
+  initialPassword: string;
+}): Promise<{ user: SafeUser }> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/admin/users`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify(data),
+  });
+
+  const resData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(resData.message || "Failed to create user") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = resData.error;
+    error.status = res.status;
+    throw error;
+  }
+  return resData;
+}
+
+export async function updateUserAdmin(
+  id: number,
+  data: {
+    name?: string;
+    email?: string;
+    role?: RoleType;
+    active?: boolean;
+  }
+): Promise<{ user: SafeUser; unassignedTicketCount: number }> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/admin/users/${id}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify(data),
+  });
+
+  const resData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(resData.message || "Failed to update user") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = resData.error;
+    error.status = res.status;
+    throw error;
+  }
+  return resData;
+}
+
+export async function resetUserPasswordAdmin(
+  id: number,
+  initialPassword: string
+): Promise<{ user: SafeUser }> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/admin/users/${id}/reset-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify({ initialPassword }),
+  });
+
+  const resData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(resData.message || "Failed to reset password") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = resData.error;
+    error.status = res.status;
+    throw error;
+  }
+  return resData;
+}
+

@@ -1,15 +1,18 @@
+import "../test-env.js";
 import { test, expect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
-// Ensure screenshot directories exist per ui-spec.md §14
-const screenshotBaseDir = path.resolve(process.cwd(), "artifacts/lab-02/screenshots");
-for (const sub of ["create-ticket", "my-tickets", "ticket-detail"]) {
-  const dir = path.join(screenshotBaseDir, sub);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
+import { getPrisma } from "../../server/src/prisma.js";
+
+const API_PORT = process.env.TEST_API_PORT || "3103";
+const API_BASE_URL = process.env.API_URL || `http://localhost:${API_PORT}`;
+
+// Ensure test run screenshot directory is isolated per <run-id> without overwriting historical screenshots
+const RUN_ID = process.env.RUN_ID || `run-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+const screenshotBaseDir = process.env.SCREENSHOT_DIR
+  ? path.resolve(process.env.SCREENSHOT_DIR)
+  : path.resolve(process.cwd(), "artifacts/lab-03/screenshots", RUN_ID);
 
 // Assert that a captured screenshot exists, is non-empty (>10KB), and is a valid PNG
 function assertValidScreenshot(filePath: string) {
@@ -29,47 +32,136 @@ function assertValidScreenshot(filePath: string) {
 
 test.describe("Responsive Layout & Visual Inspection (RESP-01, RESP-02, AC-18, §8.7, §8.8)", () => {
   let sampleTicketId = 1;
+  let createdSampleTicketId: number | null = null;
 
-  test.beforeAll(async ({ request }) => {
+  test.beforeAll(async () => {
+    // Lazily create screenshot subdirectories for this run
+    for (const sub of ["create-ticket", "my-tickets", "ticket-detail"]) {
+      const dir = path.join(screenshotBaseDir, sub);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    }
+
     try {
-      const res = await request.get("http://localhost:3000/api/tickets?requesterId=1&pageSize=1");
-      let ticketId: number | null = null;
-      if (res.ok()) {
-        const body = await res.json();
-        if (body.data && body.data.length > 0) {
-          ticketId = body.data[0].id;
-        }
-      }
-      if (!ticketId) {
-        const createRes = await request.post("http://localhost:3000/api/tickets", {
-          data: {
-            requesterId: 1,
-            categoryId: 1,
-            relatedSystemId: 1,
-            summary: "Sample Ticket for Responsive Evidence",
-            description: "Responsive test verification ticket for mobile, tablet, and desktop viewports.",
-            requestedPriority: "HIGH",
-          },
+      const prisma = getPrisma();
+      const jennifer = await prisma.user.findUnique({
+        where: { email: "jennifer.anderson@example.com" },
+      });
+
+      if (jennifer) {
+        let existingTicket = await prisma.ticket.findFirst({
+          where: { requesterId: jennifer.id },
         });
-        if (createRes.ok()) {
-          const newTicket = await createRes.json();
-          ticketId = newTicket.id;
+
+        if (!existingTicket) {
+          const cat = await prisma.category.findFirst();
+          const sys = await prisma.relatedSystem.findFirst();
+          existingTicket = await prisma.ticket.create({
+            data: {
+              ticketNumber: `TKT-2026-${Date.now().toString().slice(-6)}`,
+              summary: "Sample Ticket for Responsive Evidence",
+              description: "Responsive test verification ticket for mobile, tablet, and desktop viewports.",
+              requestedPriority: "HIGH",
+              itPriority: "HIGH",
+              requesterId: jennifer.id,
+              categoryId: cat!.id,
+              relatedSystemId: sys!.id,
+            },
+          });
+          createdSampleTicketId = existingTicket.id;
         }
+        sampleTicketId = existingTicket.id;
       }
-      sampleTicketId = ticketId || 1;
-    } catch {
+    } catch (err) {
+      console.error("Failed to setup sample ticket for responsive tests:", err);
       sampleTicketId = 1;
     }
   });
 
-  // Pre-seed sessionStorage with active requester before each test
+  test.afterAll(async () => {
+    if (!createdSampleTicketId) return;
+
+    const cleanupErrors: string[] = [];
+    const uncleanedResources: string[] = [];
+    let prisma: any = null;
+
+    try {
+      prisma = getPrisma();
+      const uploadDir = process.env.UPLOAD_DIR || "uploads_test";
+
+      try {
+        const attachments = await prisma.attachment.findMany({ where: { ticketId: createdSampleTicketId } });
+        for (const att of attachments) {
+          const fullPath = path.resolve(uploadDir, att.storedFilename);
+          if (fs.existsSync(fullPath)) {
+            try {
+              fs.unlinkSync(fullPath);
+            } catch (err: any) {
+              cleanupErrors.push(`Failed to unlink storage file '${fullPath}': ${err.message}`);
+              uncleanedResources.push(`Attachment file: ${fullPath}`);
+            }
+          }
+        }
+      } catch (err: any) {
+        cleanupErrors.push(`Failed to query attachments for ticket ${createdSampleTicketId}: ${err.message}`);
+        uncleanedResources.push(`Attachments for ticket ${createdSampleTicketId}`);
+      }
+
+      try {
+        await prisma.attachment.deleteMany({ where: { ticketId: createdSampleTicketId } });
+      } catch (err: any) {
+        cleanupErrors.push(`Failed to delete attachments from DB: ${err.message}`);
+        uncleanedResources.push(`Attachment records for ticket ${createdSampleTicketId}`);
+      }
+
+      try {
+        const existing = await prisma.ticket.findUnique({ where: { id: createdSampleTicketId } });
+        if (existing) {
+          await prisma.ticket.delete({ where: { id: createdSampleTicketId } });
+        }
+      } catch (err: any) {
+        cleanupErrors.push(`Failed to delete sample ticket ${createdSampleTicketId} from DB: ${err.message}`);
+        uncleanedResources.push(`Ticket DB record (ID: ${createdSampleTicketId})`);
+      }
+    } catch (err: any) {
+      cleanupErrors.push(`Unexpected error during teardown: ${err.message}`);
+    } finally {
+      if (prisma) {
+        await prisma.$disconnect().catch(() => {});
+      }
+    }
+
+    if (cleanupErrors.length > 0 || uncleanedResources.length > 0) {
+      const details = [
+        `[E2E CLEANUP FAILED] Encountered ${cleanupErrors.length} error(s) during teardown:`,
+        ...cleanupErrors.map((e, idx) => `  ${idx + 1}. ${e}`),
+        ...(uncleanedResources.length > 0
+          ? [`Uncleaned resources:`, ...uncleanedResources.map((r) => `  - ${r}`)]
+          : []),
+      ].join("\n");
+      throw new Error(details);
+    }
+  });
+
+  // Authenticate browser session for Jennifer Anderson before each test
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      sessionStorage.setItem(
-        "lab2-selected-requester",
-        JSON.stringify({ id: 1, name: "Jennifer Anderson" })
-      );
+    const prisma = getPrisma();
+    const jennifer = await prisma.user.findUnique({
+      where: { email: "jennifer.anderson@example.com" },
     });
+    if (jennifer) {
+      const { createSession } = await import("../../server/src/services/session.js");
+      const { rawToken } = await createSession(jennifer.id, jennifer.sessionVersion);
+      await page.context().addCookies([
+        {
+          name: "toktickit_session",
+          value: rawToken,
+          domain: "localhost",
+          path: "/",
+        },
+      ]);
+    }
   });
 
   // Helper to check horizontal overflow (AC-18)

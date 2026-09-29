@@ -1,9 +1,10 @@
 # dependencies
 node_modules/
 # env & secrets
-.env
-*.env
+.env*
 !.env.example
+!.env.test.example
+*.env
 # build output
 dist/
 build/
@@ -15,6 +16,8 @@ server/prisma/*.db
 # uploads
 uploads/
 server/uploads/
+uploads_test/
+server/uploads_test/
 # playwright
 test-results/
 playwright-report/
