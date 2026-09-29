@@ -180,6 +180,32 @@ describe("Login and Change Password UI (T12 / AC-12)", () => {
         expect(screen.getByText("Change Password Screen")).toBeInTheDocument();
       });
     });
+
+    it("displays informative notice message when passed via location.state and stays on login", async () => {
+      vi.spyOn(api, "getCurrentUserApi").mockResolvedValue(null);
+
+      render(
+        <MemoryRouter
+          initialEntries={[
+            {
+              pathname: "/login",
+              state: {
+                message: "Your account role has been updated and your active session ended. Please sign in again.",
+              },
+            },
+          ]}
+        >
+          <AuthProvider>
+            <LoginPage />
+          </AuthProvider>
+        </MemoryRouter>
+      );
+
+      expect(
+        screen.getByText(/your account role has been updated and your active session ended/i)
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+    });
   });
 
   describe("ChangePasswordPage Component", () => {

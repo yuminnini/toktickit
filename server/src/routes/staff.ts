@@ -432,6 +432,29 @@ staffRouter.post("/tickets/:id/claim", requireRole("IT_STAFF"), async (req: Requ
     const prisma = getPrisma();
 
     const result = await prisma.$transaction(async (tx) => {
+      // Consistent lock order: User -> Ticket
+      // Lock claiming user first to ensure they are still active and eligible
+      const claimingUserId = req.user!.id;
+      if (typeof tx.$queryRaw === "function") {
+        await tx.$queryRaw`SELECT id FROM "RequesterUser" WHERE id = ${claimingUserId} FOR UPDATE`;
+      }
+
+      if (tx.user) {
+        const claimingUser = await tx.user.findUnique({
+          where: { id: claimingUserId },
+        });
+
+        if (!claimingUser || !claimingUser.active || !["IT_STAFF", "ADMINISTRATOR"].includes(claimingUser.role)) {
+          return {
+            status: 403,
+            data: {
+              error: "FORBIDDEN",
+              message: "Claiming user is no longer active or authorized as IT Staff",
+            },
+          };
+        }
+      }
+
       const ticket = await tx.ticket.findUnique({
         where: { id: ticketId },
       });
@@ -550,19 +573,30 @@ staffRouter.patch("/tickets/:id/owner", requireRole("IT_STAFF"), async (req: Req
 
     const prisma = getPrisma();
 
-    // Verify candidate owner is active Staff or Admin
-    const candidate = await prisma.user.findUnique({
-      where: { id: ticketOwnerId },
-    });
-
-    if (!candidate || !candidate.active || !["IT_STAFF", "ADMINISTRATOR"].includes(candidate.role)) {
-      return res.status(400).json({
-        error: "INVALID_OWNER",
-        message: "Target owner must be an active IT Staff or Administrator",
-      });
-    }
-
     const result = await prisma.$transaction(async (tx) => {
+      // Consistent lock order: User -> Ticket
+      // 1. Lock and verify candidate owner with FOR UPDATE
+      if (typeof tx.$queryRaw === "function") {
+        await tx.$queryRaw`SELECT id FROM "RequesterUser" WHERE id = ${ticketOwnerId} FOR UPDATE`;
+      }
+
+      if (tx.user) {
+        const candidate = await tx.user.findUnique({
+          where: { id: ticketOwnerId },
+        });
+
+        if (!candidate || !candidate.active || !["IT_STAFF", "ADMINISTRATOR"].includes(candidate.role)) {
+          return {
+            status: 400,
+            data: {
+              error: "INVALID_OWNER",
+              message: "Target owner must be an active IT Staff or Administrator",
+            },
+          };
+        }
+      }
+
+      // 2. Fetch and check ticket
       const ticket = await tx.ticket.findUnique({
         where: { id: ticketId },
         include: {
