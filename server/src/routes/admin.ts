@@ -257,6 +257,12 @@ adminRouter.patch("/users/:id", async (req: Request, res: Response, next: NextFu
 
     // Atomic transaction for validations and mutations
     const result = await prisma.$transaction(async (tx) => {
+      // Consistent lock order: User -> Ticket
+      // Lock target user first to serialize concurrent deactivations/role changes with ticket reassignments
+      if (typeof tx.$queryRaw === "function") {
+        await tx.$queryRaw`SELECT id FROM "RequesterUser" WHERE id = ${targetId} FOR UPDATE`;
+      }
+
       const targetUser = await tx.user.findUnique({ where: { id: targetId } });
       if (!targetUser) {
         return { notFound: true as const };

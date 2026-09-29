@@ -612,5 +612,153 @@ describe("P11: Administrator User Management API (T40–T48 / AC-40–AC-48)", (
       const isNewMatch = await verifyPassword(freshVictim!.passwordHash!, "BrandNewPassword123!");
       expect(isNewMatch).toBe(true);
     });
+
+    it("prevents ticket assignment to deactivated staff (400 INVALID_OWNER)", async () => {
+      const prisma = getPrisma();
+      const inactiveStaff = await prisma.user.create({
+        data: {
+          name: "Inactive Tech",
+          email: `inactive.tech.${Date.now()}@example.com`,
+          role: "IT_STAFF",
+          active: false,
+          mustChangePassword: false,
+        },
+      });
+      testUserIdsToClean.push(inactiveStaff.id);
+
+      const ticket = await prisma.ticket.create({
+        data: {
+          ticketNumber: `TKT-2026-${Math.floor(100000 + Math.random() * 900000)}`,
+          requesterId: requesterSession.id,
+          categoryId,
+          relatedSystemId,
+          summary: "Test Assignment to Inactive",
+          description: "Testing inactive owner rejection",
+          requestedPriority: "MEDIUM",
+          currentStatus: "NEW",
+          version: 1,
+        },
+      });
+      testTicketIdsToClean.push(ticket.id);
+
+      const reassignRes = await request(app)
+        .patch(`/api/staff/tickets/${ticket.id}/owner`)
+        .set("Origin", allowedOrigin)
+        .set("Cookie", staffSession.cookie)
+        .set("X-CSRF-Token", staffSession.csrfToken)
+        .send({ ticketOwnerId: inactiveStaff.id, expectedVersion: 1 });
+
+      expect(reassignRes.status).toBe(400);
+      expect(reassignRes.body.error).toBe("INVALID_OWNER");
+    });
+
+    it("prevents ticket claim when claiming staff is deactivated (403 FORBIDDEN)", async () => {
+      const prisma = getPrisma();
+      const staffUser = await prisma.user.create({
+        data: {
+          name: "Soon Deactivated Staff",
+          email: `soon.deactivated.${Date.now()}@example.com`,
+          role: "IT_STAFF",
+          active: true,
+          mustChangePassword: false,
+        },
+      });
+      testUserIdsToClean.push(staffUser.id);
+
+      const session = await getAuthSessionForUser(staffUser.id);
+
+      // Admin deactivates staffUser
+      await prisma.user.update({
+        where: { id: staffUser.id },
+        data: { active: false },
+      });
+
+      const ticket = await prisma.ticket.create({
+        data: {
+          ticketNumber: `TKT-2026-${Math.floor(100000 + Math.random() * 900000)}`,
+          requesterId: requesterSession.id,
+          categoryId,
+          relatedSystemId,
+          summary: "Test Claim Inactive",
+          description: "Testing inactive claiming staff rejection",
+          requestedPriority: "MEDIUM",
+          currentStatus: "NEW",
+          version: 1,
+        },
+      });
+      testTicketIdsToClean.push(ticket.id);
+
+      const claimRes = await request(app)
+        .post(`/api/staff/tickets/${ticket.id}/claim`)
+        .set("Origin", allowedOrigin)
+        .set("Cookie", session.cookie)
+        .set("X-CSRF-Token", session.csrfToken)
+        .send({ expectedVersion: 1 });
+
+      expect([401, 403]).toContain(claimRes.status);
+      if (claimRes.status === 403) {
+        expect(claimRes.body.error).toBe("FORBIDDEN");
+      }
+    });
+
+    it("concurrent admin deactivation and staff ticket assignment preserves active owner invariant", async () => {
+      const prisma = getPrisma();
+      const targetStaff = await prisma.user.create({
+        data: {
+          name: "Race Target Staff",
+          email: `race.staff.${Date.now()}@example.com`,
+          role: "IT_STAFF",
+          active: true,
+          mustChangePassword: false,
+        },
+      });
+      testUserIdsToClean.push(targetStaff.id);
+
+      const ticket = await prisma.ticket.create({
+        data: {
+          ticketNumber: `TKT-2026-${Math.floor(100000 + Math.random() * 900000)}`,
+          requesterId: requesterSession.id,
+          categoryId,
+          relatedSystemId,
+          summary: "Race Condition Ticket",
+          description: "Testing concurrent deactivation vs assignment",
+          requestedPriority: "MEDIUM",
+          currentStatus: "NEW",
+          version: 1,
+        },
+      });
+      testTicketIdsToClean.push(ticket.id);
+
+      // Concurrently run admin deactivation and staff assignment to targetStaff
+      const [adminDeactRes, staffAssignRes] = await Promise.all([
+        request(app)
+          .patch(`/api/admin/users/${targetStaff.id}`)
+          .set("Origin", allowedOrigin)
+          .set("Cookie", adminSession.cookie)
+          .set("X-CSRF-Token", adminSession.csrfToken)
+          .send({ active: false }),
+        request(app)
+          .patch(`/api/staff/tickets/${ticket.id}/owner`)
+          .set("Origin", allowedOrigin)
+          .set("Cookie", staffSession.cookie)
+          .set("X-CSRF-Token", staffSession.csrfToken)
+          .send({ ticketOwnerId: targetStaff.id, expectedVersion: 1 }),
+      ]);
+
+      expect(adminDeactRes.status).toBe(200);
+
+      // Verify the critical invariant:
+      // The ticket must NEVER end up assigned to the deactivated user!
+      const freshTicket = await prisma.ticket.findUnique({
+        where: { id: ticket.id },
+        include: { ticketOwner: true },
+      });
+
+      if (freshTicket?.ticketOwnerId !== null) {
+        expect(freshTicket?.ticketOwner?.active).toBe(true);
+      } else {
+        expect(freshTicket?.ticketOwnerId).toBeNull();
+      }
+    });
   });
 });

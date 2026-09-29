@@ -14,8 +14,14 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number>(0);
 
+  const noticeMessage = (location.state as any)?.message || (location.state as any)?.notice;
+
   // If already authenticated, redirect to appropriate page
   useEffect(() => {
+    // If arriving with a session-revocation notice, do not auto-redirect
+    if (noticeMessage) {
+      return;
+    }
     if (user) {
       if (user.mustChangePassword) {
         navigate("/change-password", { replace: true });
@@ -117,6 +123,15 @@ export default function LoginPage() {
             <h2 className="h4 fw-bold mb-4" style={{ color: "var(--color-text)" }}>
               Sign In
             </h2>
+
+            {noticeMessage && !errorMessage && (
+              <div
+                className="alert alert-info py-2 px-3 mb-3 small"
+                role="status"
+              >
+                {noticeMessage}
+              </div>
+            )}
 
             {errorMessage && (
               <div

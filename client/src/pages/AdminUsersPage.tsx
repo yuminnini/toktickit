@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   SafeUser,
   RoleType,
@@ -11,7 +12,8 @@ import { useAuth } from "../context/AuthContext";
 import Badge from "../components/Badge";
 
 export default function AdminUsersPage() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, refreshUser } = useAuth();
+  const navigate = useNavigate();
 
   const [users, setUsers] = useState<SafeUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,13 +66,17 @@ export default function AdminUsersPage() {
         setUsers(data);
       } catch (err: any) {
         if (err.name !== "AbortError") {
+          if (err.status === 401) {
+            await refreshUser();
+            return;
+          }
           setError(err.message || "Failed to load user accounts");
         }
       } finally {
         setLoading(false);
       }
     },
-    [searchTerm, roleFilter]
+    [searchTerm, roleFilter, refreshUser]
   );
 
   useEffect(() => {
@@ -161,6 +167,9 @@ export default function AdminUsersPage() {
       return;
     }
 
+    const isSelf = editingUser.id === currentUser?.id;
+    const roleChanged = editRole !== editingUser.role;
+
     setEditSubmitting(true);
     try {
       const res = await updateUserAdmin(editingUser.id, {
@@ -171,6 +180,20 @@ export default function AdminUsersPage() {
       });
 
       setEditingUser(null);
+
+      // If updating own account role or active status, backend immediately revokes all sessions (BR-12 / AC-47).
+      // Synchronize AuthContext (clears user & cached CSRF token) and redirect to login with a notice.
+      if (isSelf && (roleChanged || !editActive)) {
+        await refreshUser();
+        navigate("/login", {
+          replace: true,
+          state: {
+            message: "Your account role has been updated and your active session ended. Please sign in again.",
+          },
+        });
+        return;
+      }
+
       let msg = "User updated successfully";
       if (res.unassignedTicketCount > 0) {
         msg += ` (${res.unassignedTicketCount} assigned tickets unassigned)`;
@@ -198,6 +221,8 @@ export default function AdminUsersPage() {
     if (!resettingUser) return;
     setResetError(null);
 
+    const isSelf = resettingUser.id === currentUser?.id;
+
     if (resetPassword.length < 12 || resetPassword.length > 128) {
       setResetError("Initial password must be between 12 and 128 characters");
       return;
@@ -208,6 +233,20 @@ export default function AdminUsersPage() {
       await resetUserPasswordAdmin(resettingUser.id, resetPassword);
       setResettingUser(null);
       setResetPassword("");
+
+      // If resetting own password, backend immediately revokes all sessions and requires password change.
+      // Synchronize AuthContext (clears user & cached CSRF token) and redirect to login with a notice.
+      if (isSelf) {
+        await refreshUser();
+        navigate("/login", {
+          replace: true,
+          state: {
+            message: "Your password has been reset. Please sign in with your new temporary password.",
+          },
+        });
+        return;
+      }
+
       setSuccessMessage(
         `Password reset successfully for ${resettingUser.name}. User will be required to change password on next login.`
       );

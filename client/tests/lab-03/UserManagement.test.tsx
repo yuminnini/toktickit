@@ -306,4 +306,111 @@ describe("User Management UI (T49 / AC-49)", () => {
       expect(screen.getByText("A user with this email already exists")).toBeInTheDocument();
     });
   });
+
+  it("synchronizes AuthContext and redirects to /login when admin modifies own role", async () => {
+    const refreshUserMock = vi.fn().mockResolvedValue(null);
+    const updateSpy = vi.spyOn(api, "updateUserAdmin").mockResolvedValue({
+      user: {
+        id: 1,
+        name: "Sarah Admin",
+        email: "sarah.admin@example.com",
+        role: "IT_STAFF",
+        active: true,
+        mustChangePassword: false,
+      },
+      unassignedTicketCount: 0,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/admin/users"]}>
+        <AuthContext.Provider
+          value={{
+            user: mockAdminUser,
+            isLoading: false,
+            login: vi.fn(),
+            logout: vi.fn(),
+            changePassword: vi.fn(),
+            refreshUser: refreshUserMock,
+          }}
+        >
+          <Routes>
+            <Route path="/admin/users" element={<AdminUsersPage />} />
+            <Route path="/login" element={<div data-testid="login-redirect">Login Page</div>} />
+          </Routes>
+        </AuthContext.Provider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Sarah Admin").length).toBeGreaterThan(0);
+    });
+
+    const editSarahBtn = screen.getAllByRole("button", { name: /edit sarah admin/i })[0];
+    fireEvent.click(editSarahBtn);
+
+    const roleSelect = screen.getByLabelText(/^role/i);
+    fireEvent.change(roleSelect, { target: { value: "IT_STAFF" } });
+
+    const saveBtn = screen.getByRole("button", { name: "Save Changes" });
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith(1, expect.objectContaining({ role: "IT_STAFF" }));
+      expect(refreshUserMock).toHaveBeenCalled();
+      expect(screen.getByTestId("login-redirect")).toBeInTheDocument();
+    });
+  });
+
+  it("synchronizes AuthContext and redirects to /login when admin resets own password", async () => {
+    const refreshUserMock = vi.fn().mockResolvedValue(null);
+    const resetSpy = vi.spyOn(api, "resetUserPasswordAdmin").mockResolvedValue({
+      user: {
+        id: 1,
+        name: "Sarah Admin",
+        email: "sarah.admin@example.com",
+        role: "ADMINISTRATOR",
+        active: true,
+        mustChangePassword: true,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/admin/users"]}>
+        <AuthContext.Provider
+          value={{
+            user: mockAdminUser,
+            isLoading: false,
+            login: vi.fn(),
+            logout: vi.fn(),
+            changePassword: vi.fn(),
+            refreshUser: refreshUserMock,
+          }}
+        >
+          <Routes>
+            <Route path="/admin/users" element={<AdminUsersPage />} />
+            <Route path="/login" element={<div data-testid="login-redirect">Login Page</div>} />
+          </Routes>
+        </AuthContext.Provider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Sarah Admin").length).toBeGreaterThan(0);
+    });
+
+    const resetBtn = screen.getAllByRole("button", { name: /reset password for sarah admin/i })[0];
+    fireEvent.click(resetBtn);
+
+    const newPwdInput = screen.getByLabelText(/new temporary password/i);
+    fireEvent.change(newPwdInput, { target: { value: "NewSelfAdminPassword123!" } });
+
+    const confirmBtn = screen.getByRole("button", { name: /confirm password reset/i });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(resetSpy).toHaveBeenCalledWith(1, "NewSelfAdminPassword123!");
+      expect(refreshUserMock).toHaveBeenCalled();
+      expect(screen.getByTestId("login-redirect")).toBeInTheDocument();
+    });
+  });
 });
