@@ -1,27 +1,55 @@
-# TokTickIT — IT Service Desk (Lab 2: Requester Portal)
+# TokTickIT — IT Service Desk (Lab 3: Users, Roles, IT Staff Ticketing, and Admin Screens)
 
-A full-stack IT service desk requester portal built with **React**, **Node.js/Express**, **Prisma ORM**, and **PostgreSQL**, styled with **Bootstrap 5** and custom **Zen Green Design System**, fully verified with **Vitest**, **Supertest**, and **Playwright**.
+A full-stack enterprise IT service desk platform built with **React**, **Node.js/Express**, **Prisma ORM**, and **PostgreSQL**, styled with **Bootstrap 5** and custom **Zen Green Design System**, fully verified with **Vitest**, **Supertest**, and **Playwright**.
+
+Lab 3 replaces the temporary development requester switcher with real authentication, session management, role-based authorization, IT Staff shared queue and ticket lifecycle workflows, communication feeds (public comments and private internal notes), and minimalist Administrator user management.
 
 ---
 
 ## Tech Stack & Architecture
 
-- **Frontend**: React 18, TypeScript, Vite, React Router 7, Bootstrap 5, Zen Green Design System.
-- **Backend**: Node.js, Express, TypeScript, Prisma ORM 5.
-- **Database**: PostgreSQL 16 (hosted via Docker container).
-- **File Upload & Storage**: Multer with localized filesystem storage, binary magic bytes content inspection (PNG, JPEG, PDF, WEBP), and disk compensation cleanup.
+- **Frontend**: React 18, TypeScript, Vite, React Router 7, Bootstrap 5, Zen Green Design System tokens (`--color-*`, `--badge-*`).
+- **Backend**: Node.js, Express, TypeScript, Prisma ORM 5, PostgreSQL 16.
+- **Security & Authentication**:
+  - Argon2id password hashing (`@node-rs/argon2`, memory: 19456 KiB, iterations: 2, parallelism: 1).
+  - 12–128 character password policy with mandatory first-login password change (`mustChangePassword`).
+  - Rolling window rate limiter (5 failed attempts per 15 min per email+IP $\rightarrow$ HTTP 429 with `Retry-After`).
+  - Cryptographically secure 32-byte session tokens stored as SHA-256 hash in DB with 8-hour lifetime and HttpOnly cookies.
+  - Strict Origin and CSRF token (`X-CSRF-Token`) verification on state-changing requests.
+  - Transaction-level advisory lock (`pg_advisory_xact_lock`) and PostgreSQL row-level locks (`FOR UPDATE`) for deterministic concurrency without deadlocks.
+- **File Upload & Storage**: Multer with localized filesystem storage, binary magic bytes content inspection (PNG, JPEG, PDF, WEBP), disk compensation cleanup, and authenticated download continuity.
 - **Testing**:
-  - **Server**: Vitest 2 + Supertest (60 tests: API contracts, data model constraints, soft removal, ownership isolation, path traversal security).
-  - **Client**: Vitest 2 + React Testing Library + jsdom (53 tests: RouteGuard, Create Ticket form validation, My Tickets filters/sorting/pagination, AttachmentSection lifecycle, Zen Green style tokens).
-  - **E2E & Responsive**: Playwright Chromium (4 tests: full user journey, real download byte verification, multi-layer ownership isolation, and 9-screenshot visual inspection across mobile, tablet, and desktop).
+  - **Server**: Vitest 2 + Supertest (**170 tests across 24 files**: Auth, RBAC, Staff Queue, Staff Detail, Communications, Admin User Management, Safe Errors, Concurrency, Seed idempotency, Migration data preservation).
+  - **Client**: Vitest 2 + React Testing Library + jsdom (**86 tests across 15 files**: AuthContext, Login, Change Password, RouteGuard, Staff Ticket Queue, Staff Ticket Detail, User Management, Theme styling).
+  - **E2E & Responsive**: Playwright Chromium (**33 tests across 5 files**: Full staff lifecycle flow, Admin user lifecycle, Accessibility WCAG compliance, Viewport responsive verification across 375px, 768px, 1024px, and 1280px).
+  - **Total**: **289 automated tests passing with 100% pass rate**.
 
 ---
 
-## Prerequisites
+## Roles and Access Matrix
 
-- **Node.js**: `v18.0.0` or higher (`node -v`)
-- **npm**: `v9.0.0` or higher (`npm -v`)
-- **Docker**: Docker Desktop or Docker Engine running locally
+| Role | Primary Permissions & Navigation | Default Landing Route |
+|---|---|---|
+| **Requester** | Create tickets with attachments; view and manage own tickets; post public comments; indicate problem appears resolved. Cannot view internal notes or change formal ticket status. | `/my-tickets` |
+| **IT Staff** | View shared IT Staff Ticket Queue with search, multi-filter, semantic priority sort, and pagination; claim unassigned tickets; reassign tickets; update IT Priority; transition statuses according to 8-state matrix; post public comments and private internal notes. | `/staff/tickets` |
+| **Administrator** | Minimalist User Management: list users, search by name/email, filter by role, create users with initial passwords, edit profile info, activate/deactivate accounts, reset initial passwords. Protected by self-deactivation block and last-active-admin lock. | `/admin/users` |
+
+---
+
+## Seed Accounts (Local Development & Demo)
+
+All seeded test accounts are configured with `mustChangePassword = true` upon initial setup:
+
+| Role | Email | Initial Password Policy | Notes |
+|---|---|---|---|
+| **Administrator** | `admin@toktickit.com` | Set via seed (`AdminPassword123!`) | Primary system admin |
+| **IT Staff** | `michaels@toktickit.com` | Set via seed (`StaffPassword123!`) | Senior Support |
+| **IT Staff** | `sarahj@toktickit.com` | Set via seed (`StaffPassword123!`) | Network & Hardware |
+| **IT Staff** | `davidl@toktickit.com` | Set via seed (`StaffPassword123!`) | Software & Access |
+| **IT Staff** | `inactive.staff@toktickit.com` | Set via seed (`StaffPassword123!`) | Inactive account (login rejected) |
+| **Requester** | `janderson@toktickit.com` | Set via seed (`RequesterPassword123!`) | Active Requester (owns legacy tickets) |
+| **Requester** | `mbrown@toktickit.com` | Set via seed (`RequesterPassword123!`) | Active Requester |
+| **Requester** | `inactive.requester@toktickit.com`| Set via seed (`RequesterPassword123!`) | Inactive account (login rejected) |
 
 ---
 
@@ -37,14 +65,14 @@ Copy example configuration files into local active files:
 # Server environment for development (Port 3000, connects to DB port 5233)
 cp server/.env.example server/.env
 
-# Server environment for automated test runs
+# Server environment for automated test runs (Port 3103, connects to DB port 5233)
 cp server/.env.test.example server/.env.test
 
 # Client environment (points to backend API on http://localhost:3000)
 cp client/.env.example client/.env
 ```
 
-> **Note on Port 5233**: `server/.env` and `server/.env.test` are pre-configured to connect to port `5233` (`postgresql://toktickit:toktickit@localhost:5233/toktickit?schema=public`) to prevent conflicts with any locally running PostgreSQL instance on port 5432.
+> **Note on Port 5233**: `server/.env` and `server/.env.test` connect to port `5233` (`postgresql://toktickit:toktickit@localhost:5233/toktickit?schema=public`) to prevent conflicts with default PostgreSQL on port 5432.
 
 ### 2. Start PostgreSQL via Docker
 
@@ -54,23 +82,15 @@ Run the PostgreSQL 16 container mapped to port `5233`:
 docker run --name toktickit-db -e POSTGRES_USER=toktickit -e POSTGRES_PASSWORD=toktickit -e POSTGRES_DB=toktickit -p 5233:5432 -d postgres:16
 ```
 
-Verify the database container is healthy:
-
-```bash
-docker ps --filter "name=toktickit-db"
-```
-
 ### 3. Install Dependencies & Playwright Browser
 
-Install the root runner, backend, frontend dependencies, and Chromium browser binary:
-
 ```bash
-# Install root test orchestration dependencies
+# Install root dependencies
 npm install
 
 # Install backend and frontend dependencies
-cd server && npm install && cd ..
-cd client && npm install && cd ..
+npm --prefix server install
+npm --prefix client install
 
 # Install Playwright Chromium browser binary
 npx playwright install chromium
@@ -78,31 +98,23 @@ npx playwright install chromium
 
 ### 4. Apply Database Migrations & Idempotent Seed
 
-Run Prisma migrations to create all database tables (`Category`, `RelatedSystem`, `RequesterUser`, `Ticket`, `Attachment`), then run the idempotent seed:
-
 ```bash
-# Apply migrations
+# Apply Prisma forward migrations (creates User, Session, PublicComment, InternalNote, etc.)
 npm run db:migrate
 
-# Seed categories, related systems, and test requesters
+# Seed categories, systems, test users, and 24 fictional tickets spanning all statuses
 npm run db:seed
 ```
 
-*(Alternatively: `cd server && npx prisma migrate dev && npx prisma db seed`)*
-
 ### 5. Build Production Bundles
-
-Compile backend TypeScript code and frontend Vite bundle to verify build validity:
 
 ```bash
 npm run build
 ```
 
-*(Alternatively: `npm run build:server && npm run build:client`)*
+*(Compiles TypeScript backend into `server/dist` and builds client bundle via `vite build`).*
 
 ### 6. Run the Application
-
-Start the backend and frontend development servers:
 
 ```bash
 # Terminal 1: Backend API (http://localhost:3000)
@@ -113,84 +125,42 @@ npm run dev:client
 ```
 
 Open [http://localhost:5173](http://localhost:5173) in your browser:
-1. Select an active requester (e.g. **Jennifer Anderson**).
-2. Arrive at **My Tickets** to view, search, filter, and paginate tickets.
-3. Click **+ Create Ticket** to submit an IT ticket with attachments.
-4. Click into any ticket to inspect **Ticket Detail**, download attachments, or soft-remove attachments.
-5. Use the navbar **Change** button to switch requesters and verify ticket isolation.
+1. Log in as an Administrator (`admin@toktickit.com`) to manage users in `/admin/users`.
+2. Log in as an IT Staff (`michaels@toktickit.com`) to triage tickets in `/staff/tickets` and operate in `/staff/tickets/:id`.
+3. Log in as a Requester (`janderson@toktickit.com`) to view and submit tickets in `/my-tickets`.
 
 ---
 
-## Running Tests
+## Running Automated Tests
 
-The test suite consists of **117 automated tests** with 100% pass rate.
+The complete turnkey test suite consists of **289 automated tests** with 100% pass rate.
 
 ### Run All Tests
 ```bash
 npm test
 ```
-*(Runs server tests → client tests → Playwright E2E tests in sequence).*
+*(Runs server tests $\rightarrow$ client tests $\rightarrow$ Playwright E2E tests in sequence with HARNESS-01 isolated environment).*
 
 ### Run Individual Test Suites
 
 ```bash
-# Server API and unit tests (60 tests)
+# Server API, unit, and concurrency tests (170 tests across 24 files)
 npm run test:server
 
-# Client component, style, and integration tests (53 tests)
+# Client component, style, and integration tests (86 tests across 15 files)
 npm run test:client
 
-# Playwright End-to-End and Responsive tests (4 tests)
+# Playwright End-to-End, Accessibility, and Responsive tests (33 tests across 5 files)
 npm run test:e2e
 ```
 
 ---
 
-## Test & Behavioral Verification Strategy
-
-Tests are intentionally designed to **fail when real behaviors break**, avoiding superficial assertions:
-
-1. **Attachment Download Verification**:
-   - E2E tests click the download link, capture the browser's `download` event, verify the suggested filename (`sample-attachment.png`), and validate that the downloaded binary bytes exactly match the uploaded file fixture.
-   - Tests assert that soft-removed attachments immediately revoke download access in both the UI and backend API (`404 NOT_FOUND`).
-2. **Ownership & Non-Disclosure Isolation (BR-10, BR-13, AC-03)**:
-   - When switching requesters, foreign tickets are hidden from the ticket table and mobile cards.
-   - Direct URL access to another user's ticket renders a secure "Ticket Not Found" page.
-   - Cross-requester API calls to `GET /api/tickets/:id`, `GET /api/attachments/:id`, `GET /api/attachments/:id/download`, and `DELETE /api/attachments/:id` strictly return `404 NOT_FOUND` (never `403` or leaking ticket existence).
-   - Ticket list API payloads strictly exclude foreign tickets.
-3. **Screenshot & Visual Integrity Verification**:
-   - Responsive E2E tests assert that all required interactive and layout elements are rendered on the page before capturing full-page screenshots.
-   - All 9 captured screenshot files are validated on disk: they must exist, exceed non-trivial size (>10 KB to prevent blank page false passes), and begin with valid PNG magic header bytes (`\x89PNG\r\n\x1a\n`).
-
----
-
-## Visual Evidence Artifacts
-
-Screenshots generated automatically across 3 responsive breakpoints (Mobile: 375px, Tablet: 1024px, Desktop: 1280px) are saved in:
-
-```
-artifacts/lab-02/screenshots/
-├── create-ticket/
-│   ├── mobile.png
-│   ├── tablet.png
-│   └── desktop.png
-├── my-tickets/
-│   ├── mobile.png
-│   ├── tablet.png
-│   └── desktop.png
-└── ticket-detail/
-    ├── mobile.png
-    ├── tablet.png
-    └── desktop.png
-```
-
----
-
-## Automated Test Summary
+## Verification & Test Breakdown
 
 | Suite | Runner | Test Files | Total Tests | Status | Coverage Areas |
 |---|---|---|---|---|---|
-| **Server** | Vitest + Supertest | 11 | 60 | ✅ Pass | API contracts, Ticket generator, Requester constraints, Seed idempotency, Multi-file upload, Magic bytes validation, 5 active file quota, Soft removal, Download security, Path traversal prevention, Requester isolation |
-| **Client** | Vitest + React Testing Library | 10 | 53 | ✅ Pass | RouteGuard context enforcement, CreateTicket validation & dual-phase submission, MyTickets filtering, column header sorting, numbered pagination, BR-12 empty/no-results states, AttachmentSection modal focus & error handling, Badge color tokens, Mobile card vs Desktop table layout |
-| **E2E** | Playwright Chromium | 2 | 4 | ✅ Pass | `E2E-01` complete ticket flow with real file download & soft-removal, `E2E-02` requester switching & multi-layer ownership isolation, `RESP-01` 375px mobile visual inspection, `RESP-02` 1024px & 1280px visual inspection |
-| **Total** | | **23** | **117** | **✅ 100% Pass** | |
+| **Server** | Vitest + Supertest | 24 | 170 | ✅ Pass | Argon2id hashing, Password policy, Rate limiting, Session rotation/revocation, CSRF protection, Role-based access control, Requester regression, Staff Queue search/filter/sort/pagination, Claim/reassign/priority/status matrix, Optimistic concurrency (409), Transaction advisory locks (deadlock prevention), Public comments, Private internal notes (403/404 isolation), Admin user CRUD, Self-deactivation block, Last-admin invariant, Atomic ticket unassignment, Safe error handling (non-disclosure) |
+| **Client** | Vitest + React Testing Library | 15 | 86 | ✅ Pass | AuthContext state management, Login page validation & rate-limit feedback, Change Password policy & forced redirect, RouteGuard RBAC, Staff Ticket Queue table & card responsive views, Filter toolbar & pagination, Staff Ticket Detail operational controls, Status transition modal, Comments & Notes feeds, Admin User Management modals, Zen Green style tokens & status badge pairs |
+| **E2E** | Playwright Chromium | 5 | 33 | ✅ Pass | Full IT Staff ticket lifecycle (`staff-ticket-flow.spec.ts`), Full Administrator user lifecycle (`user-administration.spec.ts`), Accessibility & touch targets $\ge$44px (`accessibility.spec.ts`), Responsive visual inspection across 375px, 768px, 1024px, and 1280px (`responsive.spec.ts`), Legacy requester ticket flow regression (`requester-ticket-flow.spec.ts`) |
+| **Total** | | **44** | **289** | **✅ 100% Pass** | **Zero test failures, zero flaky tests, clean production builds** |

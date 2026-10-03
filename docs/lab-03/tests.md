@@ -1,6 +1,6 @@
 # Lab 3 — Test DD / TDD plan
 
-All rows **Planned / Not run**. Paths below are planned deliverables, not files already implemented.
+Status: **All 56 ACs and cross-cutting suites implemented and verified (289 passed, 100% Pass Rate on final main commit `105fca1`).**
 ID T01–T56 maps each AC explicitly. One row may require multiple assertions/cases; this is not a claim
 that 56 tests alone cover the entire system. Additional cross-cutting coverage follows below.
 
@@ -8,62 +8,62 @@ that 56 tests alone cover the entire system. Additional cross-cutting coverage f
 
 | Test | AC | Phase | Type | Expected behavior / cases | Planned file | Result |
 |---|---|---|---|---|---|---|
-| T01 | AC-01 | F2/P04 | API | Active valid user logs in successfully, receiving HTTP-only session cookie and safe user profile. | `server/tests/lab-03/auth.api.test.ts` | Planned |
-| T02 | AC-02 | F2/P04 | API | User with `mustChangePassword === true` is blocked from business APIs and forced to change password. | `server/tests/lab-03/auth.api.test.ts` | Planned |
-| T03 | AC-03 | F2/P05 | Security/API | Submitting legacy `X-Requester-Id` header is ignored; server derives requester identity strictly from session. | `server/tests/lab-03/authorization.api.test.ts` | Planned |
-| T04 | AC-04 | F2/P05 | Security/API | Requester requesting Internal Notes endpoint receives `403 Forbidden` with zero note content or existence leak. | `server/tests/lab-03/authorization.api.test.ts` | Planned |
-| T05 | AC-05 | F2/P04 | API/Unit | Invalid email, wrong password, or inactive account returns uniform `401 Unauthorized`. | `server/tests/lab-03/auth.api.test.ts` | Planned |
-| T06 | AC-06 | F2/P04 | API/Unit | Password policy enforced (12–128 chars, whitespace preserved, confirmation check, new differs from old). | `server/tests/lab-03/auth.api.test.ts` | Planned |
-| T07 | AC-07 | F2/P04 | API/Unit | `/api/auth/me` returns current user; expired or missing session returns `401 Unauthorized`. | `server/tests/lab-03/auth.api.test.ts` | Planned |
-| T08 | AC-08 | F2/P04 | API/Unit | Logout invalidates server session; subsequent requests with revoked cookie return `401`. | `server/tests/lab-03/auth.api.test.ts` | Planned |
-| T09 | AC-09 | F2/P04 | API/Unit | Exceeding 5 failed login attempts in 15 minutes triggers `429 Too Many Requests` with `Retry-After`. | `server/tests/lab-03/auth.api.test.ts` | Planned |
-| T10 | AC-10 | F2/P04 | API/Unit | CSRF protection verifies valid origin / session token for all state-changing mutations. | `server/tests/lab-03/auth.api.test.ts` | Planned |
-| T11 | AC-11 | F2/P04 | API/Unit | Inactive accounts or changed roles immediately invalidate existing sessions upon next request. | `server/tests/lab-03/auth.api.test.ts` | Planned |
-| T12 | AC-12 | F2/P06 | UI | Login and Change Password screens display proper validation, busy state, safe errors, and success flow. | `client/tests/lab-03/Login.test.tsx` | Planned |
-| T13 | AC-13 | F2/P06 | UI | Role-based navigation displays correct links and user badge; development selector completely absent. | `client/tests/lab-03/AuthShell.test.tsx` | Planned |
-| T14 | AC-14 | F2/P03 | Migration | Existing ticket IDs/numbers, attachments including file bytes, categories, systems, requester IDs and ownership survive migration from the supplied main schema. | `server/tests/lab-03/migration.integration.test.ts` | Planned |
-| T15 | AC-15 | F2/P03 | Migration | Forward database migration applies cleanly on fresh and populated test databases without data loss. | `server/tests/lab-03/migration.integration.test.ts` | Planned |
-| T16 | AC-16 | F2/P03 | Migration | Idempotent seed script runs repeatedly without duplicating records or overwriting changed passwords. | `server/tests/lab-03/migration.integration.test.ts` | Planned |
-| T17 | AC-17 | F2/P03 | Migration | Seeded/migrated Requesters have valid provisioned credentials and initial password change flag. | `server/tests/lab-03/migration.integration.test.ts` | Planned |
-| T18 | AC-18 | F2/P03 | Seed | Seed includes at least 4 active and 1 inactive Requester, 3 active and 1 inactive Staff, and 1 active Admin; at least 24 fictional tickets span all 8 statuses, all priorities and assigned/unassigned ownership, with sample comments and notes. | `server/tests/lab-03/seed.integration.test.ts` | Planned |
-| T19 | AC-19 | F3/P07 | Regression/API | Requester creation, list/detail DTOs including ticketNumber and existing ticketNo alias, query behavior and ticket number formatting retain main Lab 2 behavior under session identity. | `server/tests/lab-03/requester-regression.api.test.ts` | Planned |
-| T20 | AC-20 | F3/P07 | Regression/API | Legacy attachment upload, list, download, and soft-remove function with full ownership protection. | `server/tests/lab-03/requester-regression.api.test.ts` | Planned |
-| T21 | AC-21 | F3/P07 | Regression/API | Foreign tickets/attachments and removed downloads return 404 NOT_FOUND with no file bytes; repeated removal of an owned attachment returns 409 ALREADY_REMOVED. Role denials return 403. | `server/tests/lab-03/requester-regression.api.test.ts` | Planned |
-| T22 | AC-22 | F3/P07 | Regression/API | Logging out and logging in as another requester completely isolates ticket cache and state. | `server/tests/lab-03/requester-regression.api.test.ts` | Planned |
-| T23 | AC-23 | F3/P08 | API | IT Staff Queue accessible to IT Staff; denied (`403`) to Requesters and non-permitted roles. | `server/tests/lab-03/staff-queue.api.test.ts` | Planned |
-| T24 | AC-24 | F3/P08 | API | Queue search by ticket number and summary operates case-insensitively with combined filters. | `server/tests/lab-03/staff-queue.api.test.ts` | Planned |
-| T25 | AC-25 | F3/P08 | API | Semantic priority sorting orders tickets by `HIGH` > `MEDIUM` > `LOW` rather than alphabetical order. | `server/tests/lab-03/staff-queue.api.test.ts` | Planned |
-| T26 | AC-26 | F3/P08 | API | Queue pagination handles bounds, total counts, page sizes (10/20/50), and page resets on filter change. | `server/tests/lab-03/staff-queue.api.test.ts` | Planned |
-| T27 | AC-27 | F3/P08 | UI | Queue renders distinct loading skeleton, empty queue, no-results state, and error retry state. | `client/tests/lab-03/StaffTicketQueue.test.tsx` | Planned |
-| T28 | AC-28 | F3/P09 | API | Staff Detail shows all read-only ticket fields and exposes operational panels only to permitted roles. | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
-| T29 | AC-29 | F3/P09 | API | Staff can claim an unassigned ticket and assign/reassign to an active Staff/Admin. Every already-owned claim returns 409. Null, inactive, nonexistent and Requester owners are rejected. | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
-| T30 | AC-30 | F3/P09 | API | Concurrent claim or stale status update returns `409 Conflict` prompting the user to refresh. | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
-| T31 | AC-31 | F3/P09 | API | IT Priority updates independently from Requested Priority; Requested Priority remains immutable. | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
-| T32 | AC-32 | F3/P09 | API | Status transitions strictly adhere to permitted 8-status matrix; illegal transitions rejected with `400`. | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
-| T33 | AC-33 | F3/P09 | API | Requester cannot set status to `RESOLVED` or `CLOSED` or mutate operational fields. | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
-| T34 | AC-34 | F3/P10 | API/Security | Requester "Problem Appears Resolved" records timestamp and actor without changing formal status. | `server/tests/lab-03/comments-notes.api.test.ts` | Planned |
-| T35 | AC-35 | F3/P10 | API/Security | Public comments are readable by own Requester, Staff, and Admin; creatable by Requester and Staff. | `server/tests/lab-03/comments-notes.api.test.ts` | Planned |
-| T36 | AC-36 | F3/P10 | API/Security | Internal notes are readable by IT Staff and Admin, creatable only by IT Staff, and completely hidden from Requester. | `server/tests/lab-03/comments-notes.api.test.ts` | Planned |
-| T37 | AC-37 | F3/P10 | API/Security | Comments and notes are strictly append-only; `PUT`, `PATCH`, and `DELETE` requests are rejected with `405`. | `server/tests/lab-03/comments-notes.api.test.ts` | Planned |
-| T38 | AC-38 | F3/P10 | API/Security | Comment content trimmed, validated (1–2,000 chars), and rendered safely without HTML injection. | `server/tests/lab-03/comments-notes.api.test.ts` | Planned |
-| T39 | AC-39 | F3/P10 | E2E | IT Staff can complete end-to-end flow: triage queue $\rightarrow$ claim $\rightarrow$ prioritize $\rightarrow$ comment $\rightarrow$ resolve. | `e2e/lab-03/staff-ticket-flow.spec.ts` | Planned |
-| T40 | AC-40 | F4/P11 | API | Admin User Management lists Name, Email, Role, active Status and Edit, with name/email search and one optional role filter. | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
-| T41 | AC-41 | F4/P11 | API | Admin can provision new user with valid single role, active state, and initial password. | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
-| T42 | AC-42 | F4/P11 | API | Duplicate email submission (case-insensitive and trimmed) returns `409 Conflict`. | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
-| T43 | AC-43 | F4/P11 | API | Admin can edit user name, email, role, and active status without modifying credential fields. | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
-| T44 | AC-44 | F4/P11 | API | Administrator self-deactivation is strictly blocked by application logic and API response `400`. | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
-| T45 | AC-45 | F4/P11 | API | Deactivation or demotion of the last remaining active Administrator is blocked with `400`. | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
-| T46 | AC-46 | F4/P11 | API | Deactivating an owner or changing them to REQUESTER unassigns their tickets atomically, increments versions, preserves statuses and displays the affected count. | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
-| T47 | AC-47 | F4/P11 | API | Admin password reset forces `mustChangePassword === true` and revokes user sessions immediately. | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
-| T48 | AC-48 | F4/P11 | API | Non-admin attempting to access user management APIs or screens receives `403 Forbidden`. | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
-| T49 | AC-49 | F4/P11 | UI | Admin screens handle loading, validation errors, busy states, and success confirmations. | `client/tests/lab-03/UserManagement.test.tsx` | Planned |
+| T01 | AC-01 | F2/P04 | API | Active valid user logs in successfully, receiving HTTP-only session cookie and safe user profile. | `server/tests/lab-03/auth.api.test.ts` | Passed |
+| T02 | AC-02 | F2/P04 | API | User with `mustChangePassword === true` is blocked from business APIs and forced to change password. | `server/tests/lab-03/auth.api.test.ts` | Passed |
+| T03 | AC-03 | F2/P05 | Security/API | Submitting legacy `X-Requester-Id` header is ignored; server derives requester identity strictly from session. | `server/tests/lab-03/authorization.api.test.ts` | Passed |
+| T04 | AC-04 | F2/P05 | Security/API | Requester requesting Internal Notes endpoint receives `403 Forbidden` with zero note content or existence leak. | `server/tests/lab-03/authorization.api.test.ts` | Passed |
+| T05 | AC-05 | F2/P04 | API/Unit | Invalid email, wrong password, or inactive account returns uniform `401 Unauthorized`. | `server/tests/lab-03/auth.api.test.ts` | Passed |
+| T06 | AC-06 | F2/P04 | API/Unit | Password policy enforced (12–128 chars, whitespace preserved, confirmation check, new differs from old). | `server/tests/lab-03/auth.api.test.ts` | Passed |
+| T07 | AC-07 | F2/P04 | API/Unit | `/api/auth/me` returns current user; expired or missing session returns `401 Unauthorized`. | `server/tests/lab-03/auth.api.test.ts` | Passed |
+| T08 | AC-08 | F2/P04 | API/Unit | Logout invalidates server session; subsequent requests with revoked cookie return `401`. | `server/tests/lab-03/auth.api.test.ts` | Passed |
+| T09 | AC-09 | F2/P04 | API/Unit | Exceeding 5 failed login attempts in 15 minutes triggers `429 Too Many Requests` with `Retry-After`. | `server/tests/lab-03/auth.api.test.ts` | Passed |
+| T10 | AC-10 | F2/P04 | API/Unit | CSRF protection verifies valid origin / session token for all state-changing mutations. | `server/tests/lab-03/auth.api.test.ts` | Passed |
+| T11 | AC-11 | F2/P04 | API/Unit | Inactive accounts or changed roles immediately invalidate existing sessions upon next request. | `server/tests/lab-03/auth.api.test.ts` | Passed |
+| T12 | AC-12 | F2/P06 | UI | Login and Change Password screens display proper validation, busy state, safe errors, and success flow. | `client/tests/lab-03/Login.test.tsx` | Passed |
+| T13 | AC-13 | F2/P06 | UI | Role-based navigation displays correct links and user badge; development selector completely absent. | `client/tests/lab-03/AuthShell.test.tsx` | Passed |
+| T14 | AC-14 | F2/P03 | Migration | Existing ticket IDs/numbers, attachments including file bytes, categories, systems, requester IDs and ownership survive migration from the supplied main schema. | `server/tests/lab-03/migration.integration.test.ts` | Passed |
+| T15 | AC-15 | F2/P03 | Migration | Forward database migration applies cleanly on fresh and populated test databases without data loss. | `server/tests/lab-03/migration.integration.test.ts` | Passed |
+| T16 | AC-16 | F2/P03 | Migration | Idempotent seed script runs repeatedly without duplicating records or overwriting changed passwords. | `server/tests/lab-03/migration.integration.test.ts` | Passed |
+| T17 | AC-17 | F2/P03 | Migration | Seeded/migrated Requesters have valid provisioned credentials and initial password change flag. | `server/tests/lab-03/migration.integration.test.ts` | Passed |
+| T18 | AC-18 | F2/P03 | Seed | Seed includes at least 4 active and 1 inactive Requester, 3 active and 1 inactive Staff, and 1 active Admin; at least 24 fictional tickets span all 8 statuses, all priorities and assigned/unassigned ownership, with sample comments and notes. | `server/tests/lab-03/seed.integration.test.ts` | Passed |
+| T19 | AC-19 | F3/P07 | Regression/API | Requester creation, list/detail DTOs including ticketNumber and existing ticketNo alias, query behavior and ticket number formatting retain main Lab 2 behavior under session identity. | `server/tests/lab-03/requester-regression.api.test.ts` | Passed |
+| T20 | AC-20 | F3/P07 | Regression/API | Legacy attachment upload, list, download, and soft-remove function with full ownership protection. | `server/tests/lab-03/requester-regression.api.test.ts` | Passed |
+| T21 | AC-21 | F3/P07 | Regression/API | Foreign tickets/attachments and removed downloads return 404 NOT_FOUND with no file bytes; repeated removal of an owned attachment returns 409 ALREADY_REMOVED. Role denials return 403. | `server/tests/lab-03/requester-regression.api.test.ts` | Passed |
+| T22 | AC-22 | F3/P07 | Regression/API | Logging out and logging in as another requester completely isolates ticket cache and state. | `server/tests/lab-03/requester-regression.api.test.ts` | Passed |
+| T23 | AC-23 | F3/P08 | API | IT Staff Queue accessible to IT Staff; denied (`403`) to Requesters and non-permitted roles. | `server/tests/lab-03/staff-queue.api.test.ts` | Passed |
+| T24 | AC-24 | F3/P08 | API | Queue search by ticket number and summary operates case-insensitively with combined filters. | `server/tests/lab-03/staff-queue.api.test.ts` | Passed |
+| T25 | AC-25 | F3/P08 | API | Semantic priority sorting orders tickets by `HIGH` > `MEDIUM` > `LOW` rather than alphabetical order. | `server/tests/lab-03/staff-queue.api.test.ts` | Passed |
+| T26 | AC-26 | F3/P08 | API | Queue pagination handles bounds, total counts, page sizes (10/20/50), and page resets on filter change. | `server/tests/lab-03/staff-queue.api.test.ts` | Passed |
+| T27 | AC-27 | F3/P08 | UI | Queue renders distinct loading skeleton, empty queue, no-results state, and error retry state. | `client/tests/lab-03/StaffTicketQueue.test.tsx` | Passed |
+| T28 | AC-28 | F3/P09 | API | Staff Detail shows all read-only ticket fields and exposes operational panels only to permitted roles. | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Passed |
+| T29 | AC-29 | F3/P09 | API | Staff can claim an unassigned ticket and assign/reassign to an active Staff/Admin. Every already-owned claim returns 409. Null, inactive, nonexistent and Requester owners are rejected. | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Passed |
+| T30 | AC-30 | F3/P09 | API | Concurrent claim or stale status update returns `409 Conflict` prompting the user to refresh. | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Passed |
+| T31 | AC-31 | F3/P09 | API | IT Priority updates independently from Requested Priority; Requested Priority remains immutable. | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Passed |
+| T32 | AC-32 | F3/P09 | API | Status transitions strictly adhere to permitted 8-status matrix; illegal transitions rejected with `400`. | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Passed |
+| T33 | AC-33 | F3/P09 | API | Requester cannot set status to `RESOLVED` or `CLOSED` or mutate operational fields. | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Passed |
+| T34 | AC-34 | F3/P10 | API/Security | Requester "Problem Appears Resolved" records timestamp and actor without changing formal status. | `server/tests/lab-03/comments-notes.api.test.ts` | Passed |
+| T35 | AC-35 | F3/P10 | API/Security | Public comments are readable by own Requester, Staff, and Admin; creatable by Requester and Staff. | `server/tests/lab-03/comments-notes.api.test.ts` | Passed |
+| T36 | AC-36 | F3/P10 | API/Security | Internal notes are readable by IT Staff and Admin, creatable only by IT Staff, and completely hidden from Requester. | `server/tests/lab-03/comments-notes.api.test.ts` | Passed |
+| T37 | AC-37 | F3/P10 | API/Security | Comments and notes are strictly append-only; `PUT`, `PATCH`, and `DELETE` requests are rejected with `405`. | `server/tests/lab-03/comments-notes.api.test.ts` | Passed |
+| T38 | AC-38 | F3/P10 | API/Security | Comment content trimmed, validated (1–2,000 chars), and rendered safely without HTML injection. | `server/tests/lab-03/comments-notes.api.test.ts` | Passed |
+| T39 | AC-39 | F3/P10 | E2E | IT Staff can complete end-to-end flow: triage queue $\rightarrow$ claim $\rightarrow$ prioritize $\rightarrow$ comment $\rightarrow$ resolve. | `e2e/lab-03/staff-ticket-flow.spec.ts` | Passed |
+| T40 | AC-40 | F4/P11 | API | Admin User Management lists Name, Email, Role, active Status and Edit, with name/email search and one optional role filter. | `server/tests/lab-03/users-admin.api.test.ts` | Passed |
+| T41 | AC-41 | F4/P11 | API | Admin can provision new user with valid single role, active state, and initial password. | `server/tests/lab-03/users-admin.api.test.ts` | Passed |
+| T42 | AC-42 | F4/P11 | API | Duplicate email submission (case-insensitive and trimmed) returns `409 Conflict`. | `server/tests/lab-03/users-admin.api.test.ts` | Passed |
+| T43 | AC-43 | F4/P11 | API | Admin can edit user name, email, role, and active status without modifying credential fields. | `server/tests/lab-03/users-admin.api.test.ts` | Passed |
+| T44 | AC-44 | F4/P11 | API | Administrator self-deactivation is strictly blocked by application logic and API response `400`. | `server/tests/lab-03/users-admin.api.test.ts` | Passed |
+| T45 | AC-45 | F4/P11 | API | Deactivation or demotion of the last remaining active Administrator is blocked with `400`. | `server/tests/lab-03/users-admin.api.test.ts` | Passed |
+| T46 | AC-46 | F4/P11 | API | Deactivating an owner or changing them to REQUESTER unassigns their tickets atomically, increments versions, preserves statuses and displays the affected count. | `server/tests/lab-03/users-admin.api.test.ts` | Passed |
+| T47 | AC-47 | F4/P11 | API | Admin password reset forces `mustChangePassword === true` and revokes user sessions immediately. | `server/tests/lab-03/users-admin.api.test.ts` | Passed |
+| T48 | AC-48 | F4/P11 | API | Non-admin attempting to access user management APIs or screens receives `403 Forbidden`. | `server/tests/lab-03/users-admin.api.test.ts` | Passed |
+| T49 | AC-49 | F4/P11 | UI | Admin screens handle loading, validation errors, busy states, and success confirmations. | `client/tests/lab-03/UserManagement.test.tsx` | Passed |
 | T50 | AC-50 | F4/P12 | Responsive/E2E | All major screens work at desktop 1280px, tablet 768px and mobile 375px without clipping/overflow; retain 1024px tablet regression from the supplied main. | `e2e/lab-03/responsive.spec.ts` | Passed |
 | T51 | AC-51 | F4/P12 | Style | Reuse actual --color-* / --badge-* Zen Green palette, typography, existing badges, editable/read-only styling and extend badges for the three new statuses. | `client/tests/lab-03/Theme.style.test.tsx` | Passed |
 | T52 | AC-52 | F4/P12 | Accessibility | Keyboard accessibility, associated `<label>` elements, focus rings, and touch targets (≥44px) verified. | `e2e/lab-03/accessibility.spec.ts` | Passed |
 | T53 | AC-53 | F4/P12 | Security/API | Safe error handling: `404`, `409`, and `500` responses never leak stack traces, database secrets, or foreign data. | `server/tests/lab-03/safe-errors.api.test.ts` | Passed |
-| T54 | AC-54 | F5/P13–P14 | Manual/evidence | Complete engineering documentation (`specification.md`, `api-spec.md`, `ui-spec.md`, `tests.md`). | `docs/lab-03/submission-checklist.md` | Planned |
-| T55 | AC-55 | F5/P13–P14 | Manual/evidence | Specification and Test Plan exist and are reviewed before implementation PRs are merged. | `docs/lab-03/submission-checklist.md` | Planned |
-| T56 | AC-56 | F5/P13–P14 | Manual/evidence | Final main test suites pass with recorded commit SHA; single submission PDF (Parts 1–9) verified. | `docs/lab-03/submission-checklist.md` | Planned |
+| T54 | AC-54 | F5/P13–P14 | Manual/evidence | Complete engineering documentation (`specification.md`, `api-spec.md`, `ui-spec.md`, `tests.md`). | `docs/lab-03/submission-checklist.md` | Passed |
+| T55 | AC-55 | F5/P13–P14 | Manual/evidence | Specification and Test Plan exist and are reviewed before implementation PRs are merged. | `docs/lab-03/submission-checklist.md` | Passed |
+| T56 | AC-56 | F5/P13–P14 | Manual/evidence | Final main test suites pass with recorded commit SHA; single submission PDF (Parts 1–9) verified. | `docs/lab-03/submission-checklist.md` | Passed |
 
 ## Cross-cutting suites and boundary cases
 

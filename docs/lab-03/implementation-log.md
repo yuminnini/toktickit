@@ -261,7 +261,39 @@
   - `playwright`: 5 test files passed, 33 tests passed (0 failures, 100% pass rate).
   - `server build` (`tsc`): 0 errors, build clean.
   - `client build` (`tsc && vite build`): 0 errors, build clean.
-- **Exit Gate Status**: Completed / Passed — Phase F4 (P11–P12) fully implemented and verified against all specifications and contracts. Ready for Phase F4 review and PR merge into `lab3-staging`.
+- **Exit Gate Status**: Completed / Passed — Phase F4 (P11–P12) fully implemented and verified against all specifications and contracts. Opened PR #46 (`codex/lab3-p11-p12-admin-verification` → `lab3-staging`).
 
+### 2026-09-29: Phase F4 (P11–P12) Peer Review Resolution
+- **Reviewer Feedback Addressed (P1 & P2)**:
+  1. `[P1 Fixed]` **Concurrent Admin Deactivation Deadlock & Lock Order**: Added PostgreSQL transaction-level advisory lock (`SELECT pg_advisory_xact_lock(hashtext('toktickit:admin_user_mutation')::bigint)`) at transaction onset in `server/src/routes/admin.ts` to serialize mutual deactivations into uniform order (`Advisory Lock -> User -> Ticket`), eliminating cyclic row locks and resolving deadlocks (verified 200/400 `LAST_ACTIVE_ADMIN` with 0 internal server errors). Enforced active owner checks with row-level locks in `server/src/routes/staff.ts` (`/owner` and `/claim`) to prevent orphan tickets on inactive staff. Added concurrent test cases in `users-admin.api.test.ts`.
+  2. `[P2 Fixed]` **Client Auth Synchronization & Navigation**: Updated `client/src/pages/AdminUsersPage.tsx` to invoke `refreshUser()` when admin modifies their own role or resets their own password, immediately wiping client AuthContext state and navigating to `/login` with an informational message. Added 401 interceptor in `loadUsers`. Added regression tests in `UserManagement.test.tsx` and `Login.test.tsx`.
+- **Latest Real Verification Results**:
+  - `server`: 24 test files passed, 170 tests passed (0 failures, 100% pass rate).
+  - `client`: 15 test files passed, 86 tests passed (0 failures, 100% pass rate).
+  - `playwright`: 5 test files passed, 33 tests passed (0 failures, 100% pass rate).
+  - `server build` (`tsc`): 0 errors, clean build.
+  - `client build` (`tsc && vite build`): 0 errors, clean build.
+- **Exit Gate Status**: Completed / Passed — PR #46 approved by reviewer `BuamBuam` and merged into `lab3-staging` at commit `2a98094`.
 
+## 2026-09-29 — Phase F5 (P13–P14) Release, Verification & Submission
 
+- **Date / Contributor / Model**: 2026-09-29 | yuminnini (b4ymin) | Antigravity (Gemini 3.8 Flash)
+- **Phase & Work Packages**: F5 (P13: Review & Release, P14: Submission) | PR #47 (`lab3-staging` → `main`)
+- **Requirements & ACs**: AC-54, AC-55, AC-56
+- **Implementations & Verification**:
+  - **P13 (Release lab3-staging → main)**:
+    - Merged `lab3-staging` into `main` via PR #47 at commit `105fca159979c4a9f2d6faeacc2d749053b639f9`.
+    - Executed turnkey verification suites on final main SHA `105fca1`:
+      - Server Vitest Suite: 24 files, 170 tests passed (0 failures).
+      - Client Vitest Suite: 15 files, 86 tests passed (0 failures).
+      - Playwright E2E Suite: 5 files, 33 tests passed (0 failures).
+      - Server Build (`tsc`): 0 errors.
+      - Client Build (`tsc && vite build`): 0 errors.
+      - Total test pass: **289 passed / 289 total (100% Pass Rate)**.
+  - **P14 (Documentation & Submission Artifacts)**:
+    - Updated `README.md` reflecting Lab 3 architecture, authentication, role workflows, and running instructions.
+    - Updated `docs/lab-03/reviewer.md` with complete PR links, reviewer feedback, resolutions, approvals, and merge SHAs.
+    - Updated `docs/lab-03/tests.md` reflecting final passed status across all 56 ACs and cross-cutting suites.
+    - Updated `docs/lab-03/ai-use.md` with key prompts and student reflection.
+    - Compiled comprehensive submission PDF covering Answer Parts 1–9.
+- **Exit Gate Status**: Completed / Passed — Sprint 3 fully verified on final main SHA `105fca1` and ready for submission.
