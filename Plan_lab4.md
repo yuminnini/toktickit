@@ -163,17 +163,19 @@ flowchart TD
   - ป้ายสถานะ (Badges) และสีตาม Zen Green ให้ความแตกต่างที่มองเห็นชัดเจนโดยไม่พึ่งพาสีเพียงอย่างเดียว
   - จัดการ Error 409 Concurrency Conflict: แสดงแจ้งเตือนและมีปุ่ม Reload ข้อมูลล่าสุดโดยไม่ทำให้ข้อมูลที่กรอกค้างไว้สูญหาย
 - [ ] **P10: IT Staff & Admin Dashboard Screen**
-  - หน้า Dashboard สำหรับ IT Staff (`/dashboard` หรือ `/staff/dashboard`):
+  - หน้า Dashboard สำหรับ IT Staff (`/dashboard`):
     - Welcome Banner & Header
     - Metric Cards: New, Open, In Progress, Waiting for Requester, My Assigned
-    - แต่ละการ์ดคลิกแล้ว Drill-down ไปที่ Ticket Queue พร้อมตัวกรองอัตโนมัติ
+    - แต่ละการ์ดคลิกแล้ว Drill-down ไปที่ Ticket Queue (`/staff/tickets?status=...` หรือ `owner=mine`)
+    - อัปเดต `StaffQueuePage.tsx` ให้อ่าน filter จาก URL search params สำหรับ drill-down
     - Section "My Recent Tickets" พร้อมปุ่ม View all
-    - Quick Actions panel (Create Ticket, Search Tickets, My Queue)
+    - Quick Actions panel (Create Ticket, Search Tickets, My Queue -> `/staff/tickets?owner=mine`)
     - Responsive layout (Grid/Flexbox สลับแสดงผลตามขนาดหน้าจอ)
 - [ ] **P11: Requester Dashboard Screen**
-  - หน้า Dashboard สำหรับ Requester (`/dashboard` หรือ `/requester/dashboard`):
+  - หน้า Dashboard สำหรับ Requester (`/dashboard`):
     - Welcome Banner
-    - Metric Cards: My Open Tickets, In Progress, Resolved, Closed (คลิก Drill-down ไปหน้า My Tickets)
+    - Metric Cards: My Open Tickets, In Progress, Resolved, Closed (คลิก Drill-down ไปหน้า My Tickets พร้อม filter status)
+    - อัปเดต `MyTickets.tsx` ให้อ่าน filter จาก URL search params สำหรับ drill-down
     - Section "My Recent Tickets"
     - Quick Actions panel (Create Ticket, View My Tickets)
     - Responsive layout และ Loading skeletons

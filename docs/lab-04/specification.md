@@ -53,7 +53,7 @@ The stakeholder requires the service desk to transition from simple communicatio
 | **FR-02** | **Actions Taken Authorization:** Only authenticated IT Staff and Administrators shall create and update Actions Taken records. Authenticated Requesters may only view Actions Taken for tickets they own. Unauthorized access must yield HTTP 403 or 404 (for foreign tickets). | AC-04, AC-05, AC-06 |
 | **FR-03** | **Actions Taken Validation:** The system shall validate that `actionDateTime`, `description`, and `result` are provided and non-empty. If `followUpRequired` is `true`, `followUpNote` is strictly mandatory. The performer must be an active IT Staff or Administrator. | AC-07, AC-08, AC-09 |
 | **FR-04** | **Ticket Resolution Gate:** The system shall strictly enforce that transitioning a ticket to `RESOLVED` can only be performed by authenticated IT Staff or Administrators. Requester "appears resolved" indications remain purely advisory and shall not change ticket status. | AC-10, AC-11 |
-| **FR-05** | **Ticket Status Transition Matrix:** The backend shall enforce permitted state transitions among the 8 statuses (`NEW`, `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CLOSED`, `REOPENED`, `CANCELLED`). Disallowed transitions must be rejected with HTTP 400/422. | AC-12, AC-13 |
+| **FR-05** | **Ticket Status Transition Matrix:** The backend shall enforce permitted state transitions among the 8 statuses (`NEW`, `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CLOSED`, `REOPENED`, `CANCELLED`). Disallowed transitions must be rejected with HTTP 400 Bad Request. | AC-12, AC-13 |
 | **FR-06** | **Optimistic Concurrency Control:** Ticket mutations (status, owner, priority) shall require an `expectedVersion` check. If the ticket has been modified by another concurrent transaction, the update must fail with HTTP 409 Conflict. | AC-14, AC-15 |
 | **FR-07** | **Requester Dashboard API & UI:** The system shall provide an authoritative dashboard for Requesters summarizing their own tickets: Total Open, Waiting for Requester, Recently Updated, Recently Resolved, with quick actions and clickable drill-down filters. | AC-16, AC-17, AC-18 |
 | **FR-08** | **IT Staff Dashboard API & UI:** The system shall provide an authoritative dashboard for IT Staff summarizing queue metrics: Unassigned, My Assigned, by Status, by IT Priority, Recently Updated, with quick actions and clickable drill-down filters. | AC-19, AC-20, AC-21 |
@@ -86,29 +86,40 @@ The stakeholder requires the service desk to transition from simple communicatio
   - `CANCELLED`: Ticket invalidated or withdrawn.
 - **BR-09 (Resolution Gate):** Only IT Staff and Administrators can transition a ticket to `RESOLVED`. A Requester signaling `appearsResolved` is strictly an advisory timestamp and note; it does NOT change the ticket status.
 - **BR-10 (Permitted Transitions):**
-  - From `NEW`: -> `OPEN`, `IN_PROGRESS`, `CANCELLED`
-  - From `OPEN`: -> `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CANCELLED`
-  - From `IN_PROGRESS`: -> `WAITING_FOR_REQUESTER`, `RESOLVED`, `OPEN`, `CANCELLED`
-  - From `WAITING_FOR_REQUESTER`: -> `IN_PROGRESS`, `OPEN`, `RESOLVED`, `CANCELLED`
-  - From `RESOLVED`: -> `CLOSED`, `REOPENED`
-  - From `CLOSED`: -> `REOPENED`
-  - From `REOPENED`: -> `OPEN`, `IN_PROGRESS`, `RESOLVED`, `CANCELLED`
-  - From `CANCELLED`: Terminal state (no further transitions permitted except Admin override).
+- **BR-10 (Status Transitions & Preconditions):**
+  - Permitted transition matrix must be enforced by the backend on `PATCH /api/staff/tickets/:id/status`.
+  - Baseline matrix implemented in `server/src/routes/staff.ts:28-37`:
+    - From `NEW`: -> `OPEN`, `CANCELLED`
+    - From `OPEN`: -> `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `CANCELLED`
+    - From `IN_PROGRESS`: -> `WAITING_FOR_REQUESTER`, `RESOLVED`, `CANCELLED`
+    - From `WAITING_FOR_REQUESTER`: -> `IN_PROGRESS`, `RESOLVED`, `CANCELLED`
+    - From `RESOLVED`: -> `CLOSED`, `REOPENED`
+    - From `CLOSED`: -> `REOPENED`
+    - From `REOPENED`: -> `OPEN`, `IN_PROGRESS`, `CANCELLED`
+    - From `CANCELLED`: Terminal state (`[]`, no further transitions permitted).
+  - *(Note: Proposed matrix variations are tracked in Section 11 Decisions Table [TBD]).*
+  - **Eligible Owner Precondition (`OWNER_REQUIRED`):** Transitioning to any of `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, or `RESOLVED` requires the ticket to have an assigned active owner (`IT_STAFF` or `ADMINISTRATOR`). If unassigned or assigned to an inactive/non-staff user, the transition is rejected with HTTP 400 `OWNER_REQUIRED`.
+  - Entering `REOPENED` atomically clears `appearsResolvedAt` and `appearsResolvedById`.
 - **BR-11 (Concurrency Control):** All ticket updates (status, owner, priority) must verify the ticket `version`. If the client submits `expectedVersion` that does not match the database version, the update is rejected with HTTP 409 Conflict.
 
 ### Dashboard Calculation Rules
 - **BR-12 (Requester Dashboard Calculations):**
-  - `totalOpen`: Count of tickets where `requesterId = currentUser.id` and `currentStatus IN ('NEW', 'OPEN', 'IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'REOPENED')`.
+  - `myOpenTickets`: Count of tickets where `requesterId = currentUser.id` and `currentStatus IN ('NEW', 'OPEN', 'IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'REOPENED')`.
+  - `inProgress`: Count of tickets where `requesterId = currentUser.id` and `currentStatus = 'IN_PROGRESS'`.
+  - `resolved`: Count of tickets where `requesterId = currentUser.id` and `currentStatus = 'RESOLVED'`.
+  - `closed`: Count of tickets where `requesterId = currentUser.id` and `currentStatus = 'CLOSED'`.
   - `waitingForRequester`: Count of tickets where `requesterId = currentUser.id` and `currentStatus = 'WAITING_FOR_REQUESTER'`.
   - `recentlyUpdated`: Up to 5 most recently updated tickets where `requesterId = currentUser.id`, ordered by `updatedAt DESC`.
-  - `recentlyResolved`: Count of tickets where `requesterId = currentUser.id` and `currentStatus = 'RESOLVED'` within the last 30 days.
   - Empty behavior: When no tickets exist, metric cards display `0` and list views display friendly empty state with a "Create Ticket" action button.
 - **BR-13 (IT Staff Dashboard Calculations):**
-  - `unassigned`: Count of tickets where `ticketOwnerId IS NULL` and `currentStatus NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED')`.
+  - `new`: Count of tickets where `currentStatus = 'NEW'`.
+  - `open`: Count of tickets where `currentStatus = 'OPEN'`.
+  - `inProgress`: Count of tickets where `currentStatus = 'IN_PROGRESS'`.
+  - `waitingForRequester`: Count of tickets where `currentStatus = 'WAITING_FOR_REQUESTER'`.
   - `myAssigned`: Count of tickets where `ticketOwnerId = currentUser.id` and `currentStatus NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED')`.
-  - `byStatus`: Count of active tickets grouped by each of the active statuses (`NEW`, `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`).
-  - `byPriority`: Count of active tickets grouped by `itPriority` (`HIGH`, `MEDIUM`, `LOW`).
-  - `recentQueue`: Up to 5 most recently updated active tickets ordered by `updatedAt DESC`.
+  - `byStatus`: Aggregated counts grouped by all 8 `currentStatus` enum values.
+  - `byPriority`: Aggregated counts of active tickets (`currentStatus NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED')`) grouped by `itPriority` (`HIGH`, `MEDIUM`, `LOW`).
+  - `recentQueue`: Up to 5 most recently updated active tickets (`currentStatus NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED')`) ordered by `updatedAt DESC`.
   - Empty behavior: When no tickets match, metric displays `0` and list displays "No tickets in queue".
 - **BR-14 (Administrator Dashboard Extension):**
   - Reuses all IT Staff metrics plus:
@@ -179,14 +190,14 @@ model ActionTaken {
 
 ## 8. API Contract Summary (Reference to `api-spec.md`)
 
-| Method | Endpoint | Authorized Roles | Purpose | Key Responses |
+| Method | Endpoint | Authorized Roles in Code | Purpose | Key Responses |
 |---|---|---|---|---|
 | `GET` | `/api/tickets/:id/actions` | Owner Requester, IT Staff, Admin | Get all Actions Taken for ticket | 200 OK, 401 Unauth, 403 Forbidden, 404 Not Found |
 | `POST` | `/api/tickets/:id/actions` | IT Staff, Admin | Create a new Action Taken line | 201 Created, 400 Bad Request, 403 Forbidden, 404 Not Found |
 | `PATCH` | `/api/actions/:id` | IT Staff, Admin | Update an existing Action Taken line | 200 OK, 400 Bad Request, 403 Forbidden, 404 Not Found |
 | `GET` | `/api/dashboard/requester` | Requester | Authoritative Requester metrics & recent tickets | 200 OK, 401 Unauth, 403 Forbidden |
 | `GET` | `/api/dashboard/staff` | IT Staff, Admin | Authoritative IT Staff & Admin metrics & queue | 200 OK, 401 Unauth, 403 Forbidden |
-| `PATCH` | `/api/tickets/:id/status` | IT Staff, Admin (and limited transitions) | Update ticket status with resolution gate & OCC | 200 OK, 400 Invalid transition, 409 Concurrency Conflict |
+| `PATCH` | `/api/staff/tickets/:id/status` | IT Staff (Admin role: TBD) | Update ticket status with resolution gate, owner precondition & OCC | 200 OK, 400 Invalid transition / Owner required, 409 Concurrency Conflict |
 
 ---
 
@@ -207,11 +218,11 @@ model ActionTaken {
 - **AC-13:** Given an attempt to perform an illegal transition (e.g. `NEW` directly to `RESOLVED` or modifying a `CANCELLED` ticket), the backend rejects the change with HTTP 400 Bad Request.
 - **AC-14:** Given a ticket update request with `expectedVersion` matching the current version, the update succeeds and increments `version` by 1.
 - **AC-15:** Given two concurrent users updating the same ticket, when the second user submits an outdated `expectedVersion`, the backend returns HTTP 409 Conflict without overwriting the first user's changes.
-- **AC-16:** Given an authenticated Requester requesting `GET /api/dashboard/requester`, the response returns accurate counts for `totalOpen`, `waitingForRequester`, `recentlyResolved`, and up to 5 `recentlyUpdated` tickets belonging exclusively to that requester.
+- **AC-16:** Given an authenticated Requester requesting `GET /api/dashboard/requester`, the response returns accurate counts for `myOpenTickets`, `inProgress`, `resolved`, `closed`, `waitingForRequester`, and up to 5 `recentlyUpdated` tickets belonging exclusively to that requester.
 - **AC-17:** Given a newly registered Requester with zero tickets, the Requester Dashboard returns zero for all counts and an empty array for recent tickets, displaying friendly empty states in the UI.
-- **AC-18:** Given a Requester clicking a dashboard metric card (e.g. "Waiting for Requester"), the UI navigates to `/my-tickets` pre-filtered by status `WAITING_FOR_REQUESTER`.
-- **AC-19:** Given an authenticated IT Staff member requesting `GET /api/dashboard/staff`, the response returns accurate counts for `unassigned`, `myAssigned`, counts by status, counts by priority, and recent tickets in the queue.
-- **AC-20:** Given an IT Staff member clicking the "My Assigned" card, the UI navigates to `/staff/queue` pre-filtered by assigned to current user.
+- **AC-18:** Given a Requester clicking a dashboard metric card (e.g. "In Progress"), the UI navigates to `/my-tickets?status=IN_PROGRESS` pre-filtered by that status.
+- **AC-19:** Given an authenticated IT Staff member requesting `GET /api/dashboard/staff`, the response returns accurate counts for `new`, `open`, `inProgress`, `waitingForRequester`, `myAssigned`, counts by status, counts by priority, and recent tickets in the queue.
+- **AC-20:** Given an IT Staff member clicking the "My Assigned" card, the UI navigates to `/staff/tickets?owner=mine` pre-filtered by assigned to current user.
 - **AC-21:** Given an authenticated Administrator requesting `GET /api/dashboard/staff`, the response includes all IT Staff operational metrics plus `userStats` (total users, active staff, inactive users).
 - **AC-22:** Given an unauthenticated user requesting any dashboard or Actions Taken endpoint, the request is rejected with HTTP 401 Unauthorized.
 - **AC-23:** Given any screen in Lab 4 (Dashboards, Actions Taken on Ticket Detail), the UI renders properly with readable text, accessible contrast, and no horizontal overflow at 1280px, 768px, and 375px viewports.
@@ -237,9 +248,17 @@ model ActionTaken {
 
 ---
 
-## 11. Assumptions and Implementation Decisions
+## 11. Decisions & TBD Questions Table
 
-1. **Actions Taken Ordering:** Actions are ordered ascending by `actionDateTime` (oldest action first) so that team members can read the chronological work narrative from top to bottom.
-2. **Follow-Up Handling:** Follow-up notes are required only if `followUpRequired` is checked `true`. If unchecked, the field is disabled or optional.
-3. **Admin Role Capabilities:** Administrators possess full IT Staff capabilities plus access to user administration and expanded system user counts on the dashboard.
-4. **Advisory Resolution vs Formal Resolution:** When a Requester clicks "Problem Appears Resolved", the system records `appearsResolvedAt` and notes, but leaves the ticket status as-is until IT Staff verifies the work and marks it `RESOLVED`.
+The following design decisions and questions remain under discussion with the user/team and are flagged as **`[TBD]`** (Pending Decision):
+
+| # | Question / Topic | Current Baseline / Code Status | Proposed Options / Alternatives | Decision Status |
+|---|---|---|---|---|
+| **D1** | **Ticket Status Transition Matrix** | Baseline code in `server/src/routes/staff.ts:28-37` allows:<br>- `NEW` -> `OPEN`, `CANCELLED`<br>- `OPEN` -> `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `CANCELLED`<br>- `IN_PROGRESS` -> `WAITING_FOR_REQUESTER`, `RESOLVED`, `CANCELLED`<br>- `WAITING_FOR_REQUESTER` -> `IN_PROGRESS`, `RESOLVED`, `CANCELLED`<br>- `RESOLVED` -> `CLOSED`, `REOPENED`<br>- `CLOSED` -> `REOPENED`<br>- `REOPENED` -> `OPEN`, `IN_PROGRESS`, `CANCELLED`<br>- `CANCELLED` -> `[]` | **Option A (Keep Baseline Code):** Keep existing 8-state matrix in `staff.ts` exactly as implemented.<br>**Option B (Expand Matrix):** Add direct transitions like `NEW`->`IN_PROGRESS`, `OPEN`->`RESOLVED`, `IN_PROGRESS`->`OPEN`, `WAITING`->`OPEN`, `REOPENED`->`RESOLVED`. | `[TBD]` — Pending User Choice |
+| **D2** | **Resolution Gate & Actions Taken Dependency** | Currently, status update to `RESOLVED` checks owner precondition (`OWNER_REQUIRED`), but does not require an `ActionTaken` record. | **Option A:** Require at least one Action Taken record before transitioning to `RESOLVED` (reject with HTTP 400 `ACTION_REQUIRED`).<br>**Option B:** Allow resolving without Actions Taken (advisory only). | `[TBD]` — Pending User Choice |
+| **D3** | **`resolutionNote` field in status transition** | Currently, `PATCH /api/staff/tickets/:id/status` accepts only `{ currentStatus, expectedVersion }`. | **Option A:** Remove `resolutionNote` from request body schema entirely (use Actions Taken / internal notes for resolution context).<br>**Option B:** Add `resolutionNote` to Prisma `Ticket` schema & migration and validate on resolve. | `[TBD]` — Pending User Choice |
+| **D4** | **Actions Taken Edit Permissions** | Handout states IT Staff and Administrators create and update Actions Taken. | **Option A:** Any active IT Staff/Admin can edit any Action Taken record on the ticket.<br>**Option B:** Only the author (`performedById`) or an Admin can edit an existing Action Taken. | `[TBD]` — Pending User Choice |
+| **D5** | **Actions Taken Modification on Closed/Cancelled Tickets** | Not specified in handout. | **Option A:** Actions Taken can only be created/edited on active tickets (block if `RESOLVED`, `CLOSED`, `CANCELLED` with HTTP 400).<br>**Option B:** Permit appending/editing Actions Taken regardless of ticket status. | `[TBD]` — Pending User Choice |
+| **D6** | **Administrator Role on Status Transitions** | `server/src/routes/staff.ts:793` currently uses `requireRole("IT_STAFF")`, blocking `ADMINISTRATOR` with 403. | **Option A:** Change to `requireRole("IT_STAFF", "ADMINISTRATOR")` across all operational routes (`/status`, `/owner`, `/priority`, `/claim`).<br>**Option B:** Keep strictly `IT_STAFF` only as implemented in Lab 3 baseline. | `[TBD]` — Pending User Choice |
+| **D7** | **Optimistic Concurrency on `PATCH /api/actions/:id`** | Actions Taken model has `updatedAt`. | **Option A:** Require `expectedVersion` or timestamp check on `PATCH /api/actions/:id`.<br>**Option B:** Standard partial update without explicit versioning. | `[TBD]` — Pending User Choice |
+

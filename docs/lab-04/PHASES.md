@@ -1,6 +1,6 @@
 # TokTickIT Lab 4 — PHASES & Work Packages (F1–F5 / P00–P14)
 
-เอกสารนี้อ้างอิงและเชื่อมโยงกับ master plan หลักที่ [Plan_lab4.md](file:///c:/Users/uesr/OneDrive/Desktop/HW/cpe334_SE/toktickit/Plan_lab4.md)
+เอกสารนี้อ้างอิงและเชื่อมโยงกับ master plan หลักที่ [Plan_lab4.md](../../Plan_lab4.md)
 
 ```mermaid
 flowchart LR
@@ -20,4 +20,4 @@ flowchart LR
 | **F4** | P08–P11 | Zen Green Frontend Implementation | UI ตรงตาม Zen Green design system; รองรับ Desktop, Tablet, Mobile (375/768/1280px); Accessible (keyboard, focus, non-color cues); Component tests ผ่าน |
 | **F5** | P12–P14 | Hardening, Full Regression & Submission | Automated test suite ทุกตัว (API, Unit, E2E) ผ่าน 100%; Screenshots ครบถ้วน; เอกสารและ PDF Answer Part 1–9 ครบถ้วนตรงความเป็นจริง |
 
-รายละเอียดแต่ละแพ็กเกจงาน ดูได้ที่ [Plan_lab4.md](file:///c:/Users/uesr/OneDrive/Desktop/HW/cpe334_SE/toktickit/Plan_lab4.md)
+รายละเอียดแต่ละแพ็กเกจงาน ดูได้ที่ [Plan_lab4.md](../../Plan_lab4.md)

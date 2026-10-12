@@ -157,13 +157,15 @@ All error responses adhere to the standard JSON structure:
 
 ### 3.1 Requester Dashboard API
 - **Method & Path:** `GET /api/dashboard/requester`
-- **Access Control:** Authenticated `REQUESTER`. (Staff/Admin calling this endpoint receive their own requester data if tickets exist or empty counts).
+- **Access Control:** Authenticated `REQUESTER`. (Staff/Admin calling this endpoint receive their own requester data if tickets exist or zero counts).
 - **Success Response (200 OK):**
 ```json
 {
-  "totalOpen": 3,
+  "myOpenTickets": 3,
+  "inProgress": 2,
+  "resolved": 5,
+  "closed": 12,
   "waitingForRequester": 1,
-  "recentlyResolved": 5,
   "recentlyUpdated": [
     {
       "id": 12,
@@ -179,9 +181,11 @@ All error responses adhere to the standard JSON structure:
 }
 ```
 - **Calculation Specifications:**
-  - `totalOpen`: `COUNT(*)` where `requesterId = user.id` AND `currentStatus IN ('NEW', 'OPEN', 'IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'REOPENED')`.
+  - `myOpenTickets`: `COUNT(*)` where `requesterId = user.id` AND `currentStatus IN ('NEW', 'OPEN', 'IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'REOPENED')`.
+  - `inProgress`: `COUNT(*)` where `requesterId = user.id` AND `currentStatus = 'IN_PROGRESS'`.
+  - `resolved`: `COUNT(*)` where `requesterId = user.id` AND `currentStatus = 'RESOLVED'`.
+  - `closed`: `COUNT(*)` where `requesterId = user.id` AND `currentStatus = 'CLOSED'`.
   - `waitingForRequester`: `COUNT(*)` where `requesterId = user.id` AND `currentStatus = 'WAITING_FOR_REQUESTER'`.
-  - `recentlyResolved`: `COUNT(*)` where `requesterId = user.id` AND `currentStatus = 'RESOLVED'` within the past 30 days.
   - `recentlyUpdated`: Top 5 tickets ordered by `updatedAt DESC` for the authenticated requester.
 
 ---
@@ -192,7 +196,10 @@ All error responses adhere to the standard JSON structure:
 - **Success Response (200 OK) for IT Staff:**
 ```json
 {
-  "unassigned": 14,
+  "new": 14,
+  "open": 23,
+  "inProgress": 18,
+  "waitingForRequester": 7,
   "myAssigned": 16,
   "byStatus": {
     "NEW": 14,
@@ -226,7 +233,10 @@ All error responses adhere to the standard JSON structure:
 - **Success Response (200 OK) for Administrator (Includes `userStats`):**
 ```json
 {
-  "unassigned": 14,
+  "new": 14,
+  "open": 23,
+  "inProgress": 18,
+  "waitingForRequester": 7,
   "myAssigned": 16,
   "byStatus": { ... },
   "byPriority": { ... },
@@ -239,57 +249,76 @@ All error responses adhere to the standard JSON structure:
 }
 ```
 - **Calculation Specifications:**
-  - `unassigned`: `COUNT(*)` where `ticketOwnerId IS NULL` AND `currentStatus NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED')`.
+  - `new`: `COUNT(*)` where `currentStatus = 'NEW'`.
+  - `open`: `COUNT(*)` where `currentStatus = 'OPEN'`.
+  - `inProgress`: `COUNT(*)` where `currentStatus = 'IN_PROGRESS'`.
+  - `waitingForRequester`: `COUNT(*)` where `currentStatus = 'WAITING_FOR_REQUESTER'`.
   - `myAssigned`: `COUNT(*)` where `ticketOwnerId = user.id` AND `currentStatus NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED')`.
-  - `byStatus`: Aggregated counts grouped by `currentStatus`.
-  - `byPriority`: Aggregated counts of active tickets grouped by `itPriority`.
-  - `recentQueue`: Top 5 active tickets (`currentStatus NOT IN ('CLOSED', 'CANCELLED')`) ordered by `updatedAt DESC`.
+  - `byStatus`: Aggregated counts grouped by all 8 `currentStatus` enum values.
+  - `byPriority`: Aggregated counts of active tickets (`currentStatus NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED')`) grouped by `itPriority`.
+  - `recentQueue`: Top 5 active tickets (`currentStatus NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED')`) ordered by `updatedAt DESC`.
 
 ---
 
 ## 4. Ticket Status Workflow, Resolution Gate & Concurrency
 
 ### 4.1 Status Transition Endpoint
-- **Method & Path:** `PATCH /api/tickets/:id/status`
-- **Access Control:** `IT_STAFF`, `ADMINISTRATOR`. Requesters are restricted.
+- **Method & Path:** `PATCH /api/staff/tickets/:id/status`
+- **Access Control:** `IT_STAFF` (Current backend code in `server/src/routes/staff.ts:793` enforces `requireRole("IT_STAFF")`. Permission for `ADMINISTRATOR` is tracked in Decisions Table [TBD]). Requesters receive `403 FORBIDDEN`.
 - **Headers:** `Content-Type: application/json`, `X-CSRF-Token: <token>`
 - **Request Body:**
 ```json
 {
-  "status": "RESOLVED",
-  "expectedVersion": 2,
-  "resolutionNote": "Replaced faulty switch; verified connection stable."
+  "currentStatus": "RESOLVED",
+  "expectedVersion": 2
 }
 ```
+- **Validation Rules:**
+  - `currentStatus`: Required string, must be a valid `TicketStatus` enum value.
+  - `expectedVersion`: Required positive integer.
 - **Resolution Gate Rule:**
-  - Transitioning to `RESOLVED` requires `IT_STAFF` or `ADMINISTRATOR`. Requesters attempting to set status to `RESOLVED` receive `403 FORBIDDEN` (`RESOLUTION_RESTRICTED`).
-- **Permitted Transition Check:**
-  - The status transition must follow the permitted state machine (BR-10). If invalid (e.g. `NEW` -> `RESOLVED` directly), returns `400 INVALID_TRANSITION`.
+  - Transitioning to `RESOLVED` requires authenticated IT Staff through this endpoint. Requesters have no access to `/api/staff/*` endpoints and receive `403 FORBIDDEN`.
+- **Precondition & Transition Checks:**
+  - **Permitted Transition:** `currentStatus` must be an allowed target from the ticket's current status. Invalid transitions return `400 INVALID_TRANSITION`.
+  - **Owner Precondition (`OWNER_REQUIRED`):** Target statuses `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, and `RESOLVED` require the ticket to have an assigned active owner (`IT_STAFF` or `ADMINISTRATOR`). Otherwise returns `400 OWNER_REQUIRED`.
 - **Optimistic Concurrency Check:**
   - If `expectedVersion != ticket.version`, transaction aborts and returns `409 VERSION_CONFLICT`.
   - On success, `version` is incremented by 1.
 - **Success Response (200 OK):**
-```json
-{
-  "id": 12,
-  "ticketNumber": "TKT-2026-00012",
-  "currentStatus": "RESOLVED",
-  "version": 3,
-  "updatedAt": "2026-10-12T10:30:00.000Z"
-}
-```
+  - Returns complete formatted staff ticket detail with updated `currentStatus`, incremented `version`, and refreshed `updatedAt`.
 
 ---
 
 ## 5. Preservation of Existing APIs (Lab 1–3)
-The following approved endpoints remain functional and unmodified:
-- `GET /api/health`
-- `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`, `GET /api/auth/csrf`, `POST /api/auth/change-password`
-- `GET /api/categories`, `GET /api/related-systems`
-- `GET /api/tickets`, `POST /api/tickets`, `GET /api/tickets/:id`
-- `GET /api/staff/queue`
-- `POST /api/tickets/:id/comments`, `GET /api/tickets/:id/comments`
-- `POST /api/tickets/:id/notes`, `GET /api/tickets/:id/notes`
-- `POST /api/tickets/:id/attachments`, `GET /api/attachments/:id/download`, `DELETE /api/attachments/:id`
-- `PATCH /api/tickets/:id/owner`, `PATCH /api/tickets/:id/priority`, `POST /api/tickets/:id/appears-resolved`
-- `GET /api/admin/users`, `POST /api/admin/users`, `PATCH /api/admin/users/:id`, `POST /api/admin/users/:id/reset-password`
+The following approved endpoints remain functional and unmodified, matching existing routes and role guards:
+
+| Endpoint | Method | Authorized Role(s) in Code | Notes / Source File |
+|---|---|---|---|
+| `/api/health` | `GET` | Public | Health check (`app.ts:94`) |
+| `/api/auth/login` | `POST` | Public | Auth login (`auth.ts:16`) |
+| `/api/auth/me` | `GET` | Authenticated (Any) | Current session profile (`auth.ts:77`) |
+| `/api/auth/csrf` | `GET` | Authenticated (Any) | Current CSRF token (`auth.ts:63`) |
+| `/api/auth/change-password` | `POST` | Authenticated (Any) | Password change (`auth.ts:139`) |
+| `/api/auth/logout` | `POST` | Authenticated (Any) | Session revocation (`auth.ts:94`) |
+| `/api/categories` | `GET` | Authenticated (Any) | Category list (`app.ts:99`) |
+| `/api/related-systems` | `GET` | Authenticated (Any) | Active related systems (`app.ts:112`) |
+| `/api/tickets` | `GET` | `REQUESTER` | List owned tickets (`app.ts:131`) |
+| `/api/tickets` | `POST` | `REQUESTER` | Create ticket (`app.ts:241`) |
+| `/api/tickets/:id` | `GET` | `REQUESTER` (own), `IT_STAFF`, `ADMINISTRATOR` | Ticket detail (`app.ts:383`) |
+| `/api/tickets/:id/attachments` | `POST` | `REQUESTER` (own) | Upload attachment (`app.ts:468`) |
+| `/api/attachments/:id/download` | `GET` | `REQUESTER` (own), `IT_STAFF`, `ADMINISTRATOR` | Download file (`app.ts:586`) |
+| `/api/attachments/:id` | `DELETE` | `REQUESTER` (own) | Soft-remove attachment (`app.ts:684`) |
+| `/api/tickets/:id/comments` | `GET`, `POST` | `REQUESTER` (own), `IT_STAFF`, `ADMINISTRATOR` (POST: Requester/Staff) | Public comments (`communications.ts:54, 88`) |
+| `/api/tickets/:id/internal-notes` | `GET` | `IT_STAFF`, `ADMINISTRATOR` | Internal notes read (`communications.ts:149`) |
+| `/api/tickets/:id/internal-notes` | `POST` | `IT_STAFF` | Internal notes create (`communications.ts:189`) |
+| `/api/tickets/:id/appears-resolved` | `POST` | `REQUESTER` (own) | Advisory resolution indication (`communications.ts:257`) |
+| `/api/staff/tickets` | `GET` | `IT_STAFF` | Staff queue with filters/sort/page (`staff.ts:100`) |
+| `/api/staff/tickets/:id` | `GET` | `IT_STAFF` | Staff ticket detail (`staff.ts:404`) |
+| `/api/staff/tickets/:id/claim` | `POST` | `IT_STAFF` | Claim unassigned ticket (`staff.ts:456`) |
+| `/api/staff/tickets/:id/owner` | `PATCH` | `IT_STAFF` | Reassign owner (`staff.ts:550`) |
+| `/api/staff/tickets/:id/priority` | `PATCH` | `IT_STAFF` | Update IT priority (`staff.ts:684`) |
+| `/api/staff/tickets/:id/status` | `PATCH` | `IT_STAFF` | Update ticket status (`staff.ts:793`) |
+| `/api/admin/users` | `GET`, `POST` | `ADMINISTRATOR` | User management list & create (`admin.ts:32, 94`) |
+| `/api/admin/users/:id` | `PATCH` | `ADMINISTRATOR` | User edit (`admin.ts:187`) |
+| `/api/admin/users/:id/reset-password` | `POST` | `ADMINISTRATOR` | Admin password reset (`admin.ts:316`) |
+

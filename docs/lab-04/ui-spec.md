@@ -70,7 +70,7 @@ Based on the layout in Handout Section 8.1:
 - Card 2: **Open** (Count, click drill-down to `/staff/tickets?status=OPEN`)
 - Card 3: **In Progress** (Count, click drill-down to `/staff/tickets?status=IN_PROGRESS`)
 - Card 4: **Waiting for Requester** (Count, click drill-down to `/staff/tickets?status=WAITING_FOR_REQUESTER`)
-- Card 5: **My Assigned** (Count, highlight background, click drill-down to `/staff/tickets?owner=me`)
+- Card 5: **My Assigned** (Count, highlight background, click drill-down to `/staff/tickets?owner=mine`)
 - Accessible attributes: `role="button"`, `tabindex="0"`, descriptive `aria-label`.
 
 ### 3.2 My Recent Tickets Panel
@@ -81,7 +81,7 @@ Based on the layout in Handout Section 8.1:
 ### 3.3 Quick Actions Panel
 - Action 1: **Create Ticket** -> `/tickets/new`
 - Action 2: **Search Tickets** -> `/staff/tickets` (focus search input)
-- Action 3: **My Queue** -> `/staff/tickets?owner=me`
+- Action 3: **My Queue** -> `/staff/tickets?owner=mine`
 
 ### 3.4 Administrator Extension
 - If logged in as `ADMINISTRATOR`, an additional concise card or summary block displays **System User Accounts**: Total Users, Active Staff, Inactive Accounts with link to `/admin/users`.
@@ -114,10 +114,12 @@ Based on the layout in Handout Section 8.2:
 ```
 
 ### 4.1 Metric Cards (4 Cards)
-- Card 1: **My Open Tickets** (Count, click drill-down to `/my-tickets?status=open`)
+- Card 1: **My Open Tickets** (Count, click drill-down to `/my-tickets`)
 - Card 2: **In Progress** (Count, click drill-down to `/my-tickets?status=IN_PROGRESS`)
 - Card 3: **Resolved** (Count, click drill-down to `/my-tickets?status=RESOLVED`)
 - Card 4: **Closed** (Count, click drill-down to `/my-tickets?status=CLOSED`)
+
+*(Note on Drill-Down URL Handling: Both `StaffQueuePage` and `MyTickets` must support initializing filter states from URL search params (`?status=...` and `?owner=mine`) so clicking any card immediately pre-filters the target queue/list).*
 
 ### 4.2 My Recent Tickets Panel
 - Compact table displaying tickets owned exclusively by the authenticated requester.
