@@ -19,7 +19,7 @@
   > "เห็นด้วยกับการวางแผนและโครงสร้างเฟส lab4ของคุณ อยากให้คุณสร้างไฟล์ชื่อPlan_lab4 เก็บไว้ซักที่เพื่อที่จะไม่ลืมรายละเอียดแต่ละเฟสว่าต้องทำอะไรบ้าง และเวลาจะเข้ามาทำต่อให้อ่านไฟล์นี้ก่อนเริ่มทำทุกครั้งครับ"
 - **Relevant Output:**
   - Complete architectural decomposition of Lab 4 into 5 Phases (F1–F5) and 15 Work Packages (P00–P14).
-  - Created `Plan_lab4.md` at root and `docs/lab-04/PHASES.md`.
+  - Created `Plan_lab4.md` at root as the single master roadmap.
   - Updated `AGENTS.md` and `.antigravityrules` to mandate reading `Plan_lab4.md` before starting work.
 - **Human Review & Adjustment:** Verified that all 9 parts of the final PDF submission criteria (60 points) are mapped directly to corresponding phases.
 
@@ -35,6 +35,18 @@
   - Authored `docs/lab-04/ui-spec.md` (Zen Green tokens, Staff & Requester Dashboards, Actions Taken forms, Responsive breakpoints, Accessibility checklist).
   - Authored `docs/lab-04/tests.md` (Full AC-to-test traceability matrix).
 - **Human Review & Adjustment:** Verified that database justifications explain the separation of `actionDateTime` from `createdAt` and the compound index on `(ticketId, actionDateTime)`.
+
+### Prompt 3: Peer Review Round 1 & Round 2 Contract Refinement
+- **Date / Model:** 2026-10-12 | Gemini 3.8 Flash (High)
+- **Purpose:** Address Peer Review feedback on `codex/lab4-p00-p02-baseline-contracts`, finalizing Decisions D2–D7, role alignment, and contract precision.
+- **Input Prompt:**
+  > "เพื่อนเรารีวิวอีกรอบ ดังนี้: รีวิวรอบ 2 (commit 2d76ec4) ... ยังเหลือ 3 เรื่องก่อน approve: 1. Decision D2–D7 ยังเป็น TBD ... 2. D6 ยัง TBD แต่ spec เขียนเหมือนตัดสินแล้ว ... 3. ตาราง endpoint ใน api-spec.md §5 อ้างเลขบรรทัดและ role ผิด ..."
+- **Relevant Output:**
+  - Finalized Decisions D1–D7 in `specification.md` §11 (D1 baseline matrix, D2 $\ge 1$ Action Taken for Resolve, D3 omit `resolutionNote`, D4 author/Admin edit, D5 lock on Resolve/Closed/Cancelled, D6 Admin status permission, D7 OCC on Actions Taken).
+  - Reconciled D6 route roles across `specification.md` (§2, FR-04, BR-09) and `api-spec.md` (§4.1 & §5).
+  - Stripped line numbers from `api-spec.md` §5 table and corrected roles.
+  - Consolidated documentation roadmap to `Plan_lab4.md`.
+- **Human Review & Adjustment:** Verified that all 3 blocking review items and non-blocking polish items are resolved before PR approval into `lab4-staging`.
 
 ---
 

@@ -91,14 +91,15 @@ All error responses adhere to the standard JSON structure:
   "attachmentNotes": "See switch-diagnostic-log.txt"
 }
 ```
-- **Validation Rules:**
-  - `actionDateTime`: Optional string. If provided, must be valid ISO-8601 date; defaults to `now()`.
+- **Validation & Business Rules:**
+  - `actionDateTime`: Optional string. If provided, must be valid ISO-8601 date and cannot be in the future (must be $\le$ current time with 5-min skew tolerance); defaults to `now()`.
   - `description`: Required string, 3 to 2000 characters.
   - `result`: Required string, 3 to 2000 characters.
   - `followUpRequired`: Required boolean (defaults to `false` if omitted).
   - `followUpNote`: **Mandatory** if `followUpRequired` is `true` (min 3 characters). If `false`, can be omitted or null.
   - `attachmentNotes`: Optional string, max 500 characters.
   - `performedById`: Extracted automatically from session user.
+  - **Ticket Status Gate (Decision D5):** Actions Taken cannot be created on tickets in `RESOLVED`, `CLOSED`, or `CANCELLED` status. Returns `400 TICKET_LOCKED`.
 - **Success Response (201 Created):**
 ```json
 {
@@ -116,12 +117,14 @@ All error responses adhere to the standard JSON structure:
   "followUpRequired": true,
   "followUpNote": "Monitor ping latency over the next 24 hours.",
   "attachmentNotes": "See switch-diagnostic-log.txt",
+  "version": 1,
   "createdAt": "2026-10-12T09:45:12.000Z",
   "updatedAt": "2026-10-12T09:45:12.000Z"
 }
 ```
 - **Error Responses:**
-  - `400 VALIDATION_ERROR`: Missing description, result, or missing followUpNote when followUpRequired is true.
+  - `400 VALIDATION_ERROR`: Missing description, result, invalid date, or missing followUpNote when followUpRequired is true.
+  - `400 TICKET_LOCKED`: Ticket is in `RESOLVED`, `CLOSED`, or `CANCELLED` status (Decision D5).
   - `403 FORBIDDEN`: User role is `REQUESTER` or staff user is inactive.
   - `404 NOT_FOUND`: Target ticket does not exist.
 
@@ -129,27 +132,54 @@ All error responses adhere to the standard JSON structure:
 
 ### 2.3 Update Action Taken
 - **Method & Path:** `PATCH /api/actions/:id`
-- **Access Control:** `IT_STAFF`, `ADMINISTRATOR` (Active users only). Requesters return `403 FORBIDDEN`.
+- **Access Control:** The original creator (`performedById`) or an active `ADMINISTRATOR` (Decision D4). Other IT Staff attempting to edit a colleague's action receive `403 ACTION_EDIT_FORBIDDEN`. Requesters receive `403 FORBIDDEN`.
 - **Headers:** `Content-Type: application/json`, `X-CSRF-Token: <token>`
-- **Request Body (Partial Update):**
+- **Request Body (Partial Update with OCC):**
 ```json
 {
   "description": "Updated description with further details.",
   "result": "Verified cable replacement resolved packet drops.",
   "followUpRequired": false,
   "followUpNote": null,
-  "attachmentNotes": null
+  "attachmentNotes": null,
+  "expectedVersion": 1
 }
 ```
-- **Validation Rules:**
-  - Same field validation as Create.
+- **Validation & Business Rules:**
+  - Same field validation rules as Create.
   - If `followUpRequired` is updated to `true`, `followUpNote` must be non-empty.
+  - `expectedVersion`: Required positive integer (Decision D7).
+  - **Ticket Status Gate (Decision D5):** Actions Taken cannot be edited on tickets in `RESOLVED`, `CLOSED`, or `CANCELLED` status. Returns `400 TICKET_LOCKED`.
+  - **Optimistic Concurrency Check (Decision D7):** If `expectedVersion != actionTaken.version`, transaction aborts and returns `409 VERSION_CONFLICT`.
 - **Success Response (200 OK):**
-  - Returns updated Action Taken record.
+```json
+{
+  "id": 102,
+  "ticketId": 12,
+  "actionDateTime": "2026-10-12T09:30:00.000Z",
+  "description": "Updated description with further details.",
+  "result": "Verified cable replacement resolved packet drops.",
+  "performedBy": {
+    "id": 3,
+    "name": "Alex Technician",
+    "email": "alex@toktickit.local",
+    "role": "IT_STAFF"
+  },
+  "followUpRequired": false,
+  "followUpNote": null,
+  "attachmentNotes": null,
+  "version": 2,
+  "createdAt": "2026-10-12T09:45:12.000Z",
+  "updatedAt": "2026-10-12T09:50:00.000Z"
+}
+```
 - **Error Responses:**
   - `400 VALIDATION_ERROR`: Field validation failed.
-  - `403 FORBIDDEN`: Unauthorized role.
+  - `400 TICKET_LOCKED`: Ticket is in `RESOLVED`, `CLOSED`, or `CANCELLED` status (Decision D5).
+  - `403 ACTION_EDIT_FORBIDDEN`: Attempted edit by an IT Staff member who is not the original creator (`performedById`) and not an Administrator (Decision D4).
+  - `403 FORBIDDEN`: Unauthorized role (`REQUESTER`) or inactive user.
   - `404 NOT_FOUND`: Action Taken record with given ID does not exist.
+  - `409 VERSION_CONFLICT`: `expectedVersion` does not match the database version (Decision D7).
 
 ---
 
@@ -264,7 +294,7 @@ All error responses adhere to the standard JSON structure:
 
 ### 4.1 Status Transition Endpoint
 - **Method & Path:** `PATCH /api/staff/tickets/:id/status`
-- **Access Control:** `IT_STAFF` (Current backend code in `server/src/routes/staff.ts:793` enforces `requireRole("IT_STAFF")`. Permission for `ADMINISTRATOR` is tracked in Decisions Table [TBD]). Requesters receive `403 FORBIDDEN`.
+- **Access Control:** `IT_STAFF`, `ADMINISTRATOR` (Updated in Lab 4 per Decision D6; baseline Lab 3 code had `IT_STAFF` only). Requesters receive `403 FORBIDDEN`.
 - **Headers:** `Content-Type: application/json`, `X-CSRF-Token: <token>`
 - **Request Body:**
 ```json
@@ -276,12 +306,14 @@ All error responses adhere to the standard JSON structure:
 - **Validation Rules:**
   - `currentStatus`: Required string, must be a valid `TicketStatus` enum value.
   - `expectedVersion`: Required positive integer.
+  - *(Note: Per Decision D3, `resolutionNote` is omitted from the status payload schema; technical work context is recorded in Actions Taken).*
 - **Resolution Gate Rule:**
-  - Transitioning to `RESOLVED` requires authenticated IT Staff through this endpoint. Requesters have no access to `/api/staff/*` endpoints and receive `403 FORBIDDEN`.
+  - Transitioning to `RESOLVED` requires authenticated IT Staff or Administrator through this endpoint (Decision D6). Requesters have no access to `/api/staff/*` endpoints and receive `403 FORBIDDEN`.
 - **Precondition & Transition Checks:**
-  - **Permitted Transition:** `currentStatus` must be an allowed target from the ticket's current status. Invalid transitions return `400 INVALID_TRANSITION`.
+  - **Permitted Transition (Decision D1):** `currentStatus` must be an allowed target from the ticket's current status per baseline matrix. Invalid transitions return `400 INVALID_TRANSITION`.
   - **Owner Precondition (`OWNER_REQUIRED`):** Target statuses `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, and `RESOLVED` require the ticket to have an assigned active owner (`IT_STAFF` or `ADMINISTRATOR`). Otherwise returns `400 OWNER_REQUIRED`.
-- **Optimistic Concurrency Check:**
+  - **Actions Taken Precondition (`ACTION_REQUIRED` - Decision D2):** Transitioning to `RESOLVED` strictly requires that at least one `ActionTaken` record exists under the ticket. If zero actions exist, the update is rejected with `400 ACTION_REQUIRED`.
+- **Optimistic Concurrency Check (Decision D7):**
   - If `expectedVersion != ticket.version`, transaction aborts and returns `409 VERSION_CONFLICT`.
   - On success, `version` is incremented by 1.
 - **Success Response (200 OK):**
@@ -292,33 +324,34 @@ All error responses adhere to the standard JSON structure:
 ## 5. Preservation of Existing APIs (Lab 1–3)
 The following approved endpoints remain functional and unmodified, matching existing routes and role guards:
 
-| Endpoint | Method | Authorized Role(s) in Code | Notes / Source File |
+| Endpoint | Method | Authorized Role(s) in Code | Source File |
 |---|---|---|---|
-| `/api/health` | `GET` | Public | Health check (`app.ts:94`) |
-| `/api/auth/login` | `POST` | Public | Auth login (`auth.ts:16`) |
-| `/api/auth/me` | `GET` | Authenticated (Any) | Current session profile (`auth.ts:77`) |
-| `/api/auth/csrf` | `GET` | Authenticated (Any) | Current CSRF token (`auth.ts:63`) |
-| `/api/auth/change-password` | `POST` | Authenticated (Any) | Password change (`auth.ts:139`) |
-| `/api/auth/logout` | `POST` | Authenticated (Any) | Session revocation (`auth.ts:94`) |
-| `/api/categories` | `GET` | Authenticated (Any) | Category list (`app.ts:99`) |
-| `/api/related-systems` | `GET` | Authenticated (Any) | Active related systems (`app.ts:112`) |
-| `/api/tickets` | `GET` | `REQUESTER` | List owned tickets (`app.ts:131`) |
-| `/api/tickets` | `POST` | `REQUESTER` | Create ticket (`app.ts:241`) |
-| `/api/tickets/:id` | `GET` | `REQUESTER` (own), `IT_STAFF`, `ADMINISTRATOR` | Ticket detail (`app.ts:383`) |
-| `/api/tickets/:id/attachments` | `POST` | `REQUESTER` (own) | Upload attachment (`app.ts:468`) |
-| `/api/attachments/:id/download` | `GET` | `REQUESTER` (own), `IT_STAFF`, `ADMINISTRATOR` | Download file (`app.ts:586`) |
-| `/api/attachments/:id` | `DELETE` | `REQUESTER` (own) | Soft-remove attachment (`app.ts:684`) |
-| `/api/tickets/:id/comments` | `GET`, `POST` | `REQUESTER` (own), `IT_STAFF`, `ADMINISTRATOR` (POST: Requester/Staff) | Public comments (`communications.ts:54, 88`) |
-| `/api/tickets/:id/internal-notes` | `GET` | `IT_STAFF`, `ADMINISTRATOR` | Internal notes read (`communications.ts:149`) |
-| `/api/tickets/:id/internal-notes` | `POST` | `IT_STAFF` | Internal notes create (`communications.ts:189`) |
-| `/api/tickets/:id/appears-resolved` | `POST` | `REQUESTER` (own) | Advisory resolution indication (`communications.ts:257`) |
-| `/api/staff/tickets` | `GET` | `IT_STAFF` | Staff queue with filters/sort/page (`staff.ts:100`) |
-| `/api/staff/tickets/:id` | `GET` | `IT_STAFF` | Staff ticket detail (`staff.ts:404`) |
-| `/api/staff/tickets/:id/claim` | `POST` | `IT_STAFF` | Claim unassigned ticket (`staff.ts:456`) |
-| `/api/staff/tickets/:id/owner` | `PATCH` | `IT_STAFF` | Reassign owner (`staff.ts:550`) |
-| `/api/staff/tickets/:id/priority` | `PATCH` | `IT_STAFF` | Update IT priority (`staff.ts:684`) |
-| `/api/staff/tickets/:id/status` | `PATCH` | `IT_STAFF` | Update ticket status (`staff.ts:793`) |
-| `/api/admin/users` | `GET`, `POST` | `ADMINISTRATOR` | User management list & create (`admin.ts:32, 94`) |
-| `/api/admin/users/:id` | `PATCH` | `ADMINISTRATOR` | User edit (`admin.ts:187`) |
-| `/api/admin/users/:id/reset-password` | `POST` | `ADMINISTRATOR` | Admin password reset (`admin.ts:316`) |
+| `/api/health` | `GET` | Public | `app.ts` |
+| `/api/auth/login` | `POST` | Public | `auth.ts` |
+| `/api/auth/me` | `GET` | Authenticated (Any) | `auth.ts` |
+| `/api/auth/csrf` | `GET` | Authenticated (Any) | `auth.ts` |
+| `/api/auth/change-password` | `POST` | Authenticated (Any) | `auth.ts` |
+| `/api/auth/logout` | `POST` | Authenticated (Any) | `auth.ts` |
+| `/api/categories` | `GET` | Authenticated (Any) | `app.ts` |
+| `/api/related-systems` | `GET` | Authenticated (Any) | `app.ts` |
+| `/api/tickets` | `GET` | `REQUESTER` | `app.ts` |
+| `/api/tickets` | `POST` | `REQUESTER` | `app.ts` |
+| `/api/tickets/:id` | `GET` | `REQUESTER` (own), `IT_STAFF`, `ADMINISTRATOR` | `app.ts` |
+| `/api/tickets/:id/attachments` | `POST` | `REQUESTER` (own) | `app.ts` |
+| `/api/attachments/:id/download` | `GET` | `REQUESTER` (own), `IT_STAFF`, `ADMINISTRATOR` | `app.ts` |
+| `/api/attachments/:id` | `DELETE` | `REQUESTER` (own) | `app.ts` |
+| `/api/tickets/:id/comments` | `GET`, `POST` | `REQUESTER` (own), `IT_STAFF`, `ADMINISTRATOR` (POST: Requester/Staff) | `communications.ts` |
+| `/api/tickets/:id/internal-notes` | `GET` | `IT_STAFF`, `ADMINISTRATOR` | `communications.ts` |
+| `/api/tickets/:id/internal-notes` | `POST` | `IT_STAFF` | `communications.ts` |
+| `/api/tickets/:id/appears-resolved` | `POST` | `REQUESTER` (own) | `communications.ts` |
+| `/api/staff/tickets` | `GET` | `IT_STAFF` | `staff.ts` |
+| `/api/staff/tickets/:id` | `GET` | `IT_STAFF`, `ADMINISTRATOR` | `staff.ts` |
+| `/api/staff/tickets/:id/claim` | `POST` | `IT_STAFF` | `staff.ts` |
+| `/api/staff/tickets/:id/owner` | `PATCH` | `IT_STAFF` | `staff.ts` |
+| `/api/staff/tickets/:id/priority` | `PATCH` | `IT_STAFF` | `staff.ts` |
+| `/api/staff/tickets/:id/status` | `PATCH` | `IT_STAFF` (Baseline) / `IT_STAFF`, `ADMINISTRATOR` (Lab 4 per D6) | `staff.ts` |
+| `/api/admin/users` | `GET`, `POST` | `ADMINISTRATOR` | `admin.ts` |
+| `/api/admin/users/:id` | `PATCH` | `ADMINISTRATOR` | `admin.ts` |
+| `/api/admin/users/:id/reset-password` | `POST` | `ADMINISTRATOR` | `admin.ts` |
+
 

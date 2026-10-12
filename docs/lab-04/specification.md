@@ -50,11 +50,11 @@ The stakeholder requires the service desk to transition from simple communicatio
 | FR ID | Requirement Statement | Mapped ACs |
 |---|---|---|
 | **FR-01** | **Actions Taken Data Management:** The system shall record multiple Actions Taken lines under a ticket with action date/time, description, result, performer, follow-up flag, follow-up note, and attachment notes. | AC-01, AC-02, AC-03 |
-| **FR-02** | **Actions Taken Authorization:** Only authenticated IT Staff and Administrators shall create and update Actions Taken records. Authenticated Requesters may only view Actions Taken for tickets they own. Unauthorized access must yield HTTP 403 or 404 (for foreign tickets). | AC-04, AC-05, AC-06 |
-| **FR-03** | **Actions Taken Validation:** The system shall validate that `actionDateTime`, `description`, and `result` are provided and non-empty. If `followUpRequired` is `true`, `followUpNote` is strictly mandatory. The performer must be an active IT Staff or Administrator. | AC-07, AC-08, AC-09 |
-| **FR-04** | **Ticket Resolution Gate:** The system shall strictly enforce that transitioning a ticket to `RESOLVED` can only be performed by authenticated IT Staff or Administrators. Requester "appears resolved" indications remain purely advisory and shall not change ticket status. | AC-10, AC-11 |
+| **FR-02** | **Actions Taken Authorization:** Only authenticated IT Staff and Administrators shall create Actions Taken records. An existing Action Taken may only be updated by its original author (`performedById`) or an Administrator (Decision D4). Actions cannot be created or modified on tickets in `RESOLVED`, `CLOSED`, or `CANCELLED` status (Decision D5). Authenticated Requesters may only view Actions Taken for tickets they own. Unauthorized access must yield HTTP 403 or 404 (for foreign tickets). | AC-04, AC-05, AC-06, AC-07 |
+| **FR-03** | **Actions Taken Validation:** The system shall validate that `actionDateTime`, `description`, and `result` are provided and non-empty. `actionDateTime` cannot be set to a future timestamp (must be $\le$ current time with small skew tolerance). If `followUpRequired` is `true`, `followUpNote` is strictly mandatory. The performer must be an active IT Staff or Administrator. | AC-07, AC-08, AC-09 |
+| **FR-04** | **Ticket Resolution Gate:** The system shall strictly enforce that transitioning a ticket to `RESOLVED` can only be performed by authenticated IT Staff or Administrators (Decision D6), and strictly requires at least one Action Taken record on the ticket (Decision D2). Requester "appears resolved" indications remain purely advisory and shall not change ticket status. | AC-10, AC-11 |
 | **FR-05** | **Ticket Status Transition Matrix:** The backend shall enforce permitted state transitions among the 8 statuses (`NEW`, `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CLOSED`, `REOPENED`, `CANCELLED`). Disallowed transitions must be rejected with HTTP 400 Bad Request. | AC-12, AC-13 |
-| **FR-06** | **Optimistic Concurrency Control:** Ticket mutations (status, owner, priority) shall require an `expectedVersion` check. If the ticket has been modified by another concurrent transaction, the update must fail with HTTP 409 Conflict. | AC-14, AC-15 |
+| **FR-06** | **Optimistic Concurrency Control:** Ticket mutations (status, owner, priority) and Action Taken edits shall require an `expectedVersion` check (Decision D7). If the record has been modified by another concurrent transaction, the update must fail with HTTP 409 Conflict. | AC-14, AC-15 |
 | **FR-07** | **Requester Dashboard API & UI:** The system shall provide an authoritative dashboard for Requesters summarizing their own tickets: Total Open, Waiting for Requester, Recently Updated, Recently Resolved, with quick actions and clickable drill-down filters. | AC-16, AC-17, AC-18 |
 | **FR-08** | **IT Staff Dashboard API & UI:** The system shall provide an authoritative dashboard for IT Staff summarizing queue metrics: Unassigned, My Assigned, by Status, by IT Priority, Recently Updated, with quick actions and clickable drill-down filters. | AC-19, AC-20, AC-21 |
 | **FR-09** | **Administrator Dashboard Extension:** The system shall allow Administrators to view IT Staff operational metrics plus concise user account statistics (total users, active staff, inactive users). | AC-22 |
@@ -66,8 +66,8 @@ The stakeholder requires the service desk to transition from simple communicatio
 ## 5. Business Rules (BR)
 
 ### Actions Taken Rules
-- **BR-01:** An Action Taken record belongs to exactly one Ticket (Parent-Child relationship). Deleting or archiving a ticket cascades or preserves action history.
-- **BR-02:** The Ticket Owner coordinates the ticket as a whole, but an Action Taken may be recorded by any active IT Staff or Administrator member (not restricted to the Ticket Owner).
+- **BR-01:** An Action Taken record belongs to exactly one Ticket (Parent-Child relationship). Deleting or archiving a ticket cascades or preserves action history. Actions Taken cannot be created or updated when the parent ticket is in `RESOLVED`, `CLOSED`, or `CANCELLED` status (returns HTTP 400 `TICKET_LOCKED`) (Decision D5).
+- **BR-02:** The Ticket Owner coordinates the ticket as a whole, but an Action Taken may be recorded by any active IT Staff or Administrator member. However, updating an existing Action Taken is restricted to its original author (`performedById`) or an Administrator (returns HTTP 403 `ACTION_EDIT_FORBIDDEN` for other staff) (Decision D4).
 - **BR-03:** The `performedBy` actor is automatically populated from the authenticated session user. Client requests cannot spoof or supply an arbitrary performer ID.
 - **BR-04:** Inactive IT Staff or Administrator users cannot record or edit Actions Taken. If a user account is deactivated, existing Actions Taken preserve the original author history.
 - **BR-05:** `followUpRequired` is a boolean flag. When `followUpRequired` is `true`, `followUpNote` is mandatory (non-empty string, min 3 characters). When `false`, `followUpNote` is optional or cleared.
@@ -84,11 +84,14 @@ The stakeholder requires the service desk to transition from simple communicatio
   - `CLOSED`: Formally closed (by IT Staff/Admin or Requester confirmation).
   - `REOPENED`: Previously resolved/closed ticket reopened due to recurring issue.
   - `CANCELLED`: Ticket invalidated or withdrawn.
-- **BR-09 (Resolution Gate):** Only IT Staff and Administrators can transition a ticket to `RESOLVED`. A Requester signaling `appearsResolved` is strictly an advisory timestamp and note; it does NOT change the ticket status.
-- **BR-10 (Permitted Transitions):**
+- **BR-09 (Resolution Gate & Preconditions):**
+  - Only IT Staff and Administrators can transition a ticket to `RESOLVED` (Decision D6).
+  - Transitioning to `RESOLVED` strictly requires at least one `ActionTaken` record on the ticket (returns HTTP 400 `ACTION_REQUIRED` if none exist) (Decision D2).
+  - A separate `resolutionNote` field is not used; technical work details are recorded in Actions Taken (Decision D3).
+  - A Requester signaling `appearsResolved` is strictly an advisory timestamp and note; it does NOT change the ticket status.
 - **BR-10 (Status Transitions & Preconditions):**
   - Permitted transition matrix must be enforced by the backend on `PATCH /api/staff/tickets/:id/status`.
-  - Baseline matrix implemented in `server/src/routes/staff.ts:28-37`:
+  - Baseline matrix implemented in `server/src/routes/staff.ts:28-37` (Decision D1 - Adopted):
     - From `NEW`: -> `OPEN`, `CANCELLED`
     - From `OPEN`: -> `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `CANCELLED`
     - From `IN_PROGRESS`: -> `WAITING_FOR_REQUESTER`, `RESOLVED`, `CANCELLED`
@@ -97,10 +100,9 @@ The stakeholder requires the service desk to transition from simple communicatio
     - From `CLOSED`: -> `REOPENED`
     - From `REOPENED`: -> `OPEN`, `IN_PROGRESS`, `CANCELLED`
     - From `CANCELLED`: Terminal state (`[]`, no further transitions permitted).
-  - *(Note: Proposed matrix variations are tracked in Section 11 Decisions Table [TBD]).*
   - **Eligible Owner Precondition (`OWNER_REQUIRED`):** Transitioning to any of `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, or `RESOLVED` requires the ticket to have an assigned active owner (`IT_STAFF` or `ADMINISTRATOR`). If unassigned or assigned to an inactive/non-staff user, the transition is rejected with HTTP 400 `OWNER_REQUIRED`.
   - Entering `REOPENED` atomically clears `appearsResolvedAt` and `appearsResolvedById`.
-- **BR-11 (Concurrency Control):** All ticket updates (status, owner, priority) must verify the ticket `version`. If the client submits `expectedVersion` that does not match the database version, the update is rejected with HTTP 409 Conflict.
+- **BR-11 (Concurrency Control):** All ticket updates (status, owner, priority) and Action Taken edits must verify `expectedVersion` against the database record `version` (Decision D7). If the client submits an `expectedVersion` that does not match the database version, the update is rejected with HTTP 409 `VERSION_CONFLICT`.
 
 ### Dashboard Calculation Rules
 - **BR-12 (Requester Dashboard Calculations):**
@@ -129,7 +131,7 @@ The stakeholder requires the service desk to transition from simple communicatio
 
 ## 6. UI Specification Summary
 
-- **Design Language:** Zen Green theme (`--zen-primary: #198754`, `--zen-bg: #f8faf8`, `--zen-surface: #ffffff`, clean borders, subtle shadows).
+- **Design Language:** Zen Green theme (`--color-primary: #006B3C`, `--color-secondary: #0B7A46`, `--color-bg: #F5F7F6`, `--color-surface: #FFFFFF`, clean borders, subtle shadows).
 - **Navigation:** Top navigation bar indicates active page clearly (`Dashboard`, `My Tickets` / `Staff Queue`, `Create Ticket`, `Profile / Logout`).
 - **Actions Taken UI (on Ticket Detail):**
   - Section placed beneath ticket details and before comments/notes.
@@ -170,6 +172,7 @@ model ActionTaken {
   followUpRequired  Boolean  @default(false)
   followUpNote      String?
   attachmentNotes   String?
+  version           Int      @default(1)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -185,6 +188,8 @@ model ActionTaken {
    - *Rationale:* The most frequent access pattern for Actions Taken is fetching all actions for a specific ticket ordered chronologically. A compound B-tree index on `(ticketId, actionDateTime)` allows PostgreSQL to perform an index-only or index scan directly matching the parent ticket and delivering pre-sorted actions without requiring an expensive runtime in-memory sort.
 3. **Decision 3: Non-destructive Additive Migration with Cascading Delete on Ticket**
    - *Rationale:* Existing tickets from Labs 1–3 contain zero actions taken. Adding `ActionTaken` as a separate table leaves legacy `Ticket`, `User`, `Attachment`, and `PublicComment` rows intact with zero column modifications required on `Ticket`. If a ticket is deleted in test environments, cascading delete cleans up child actions cleanly.
+4. **Decision 4: Optimistic Concurrency Control (`version`) on `ActionTaken` (Decision D7)**
+   - *Rationale:* Handout Sections 5.1 and 6.1 require explicit optimistic-concurrency and stale-update handling. Adding `version Int @default(1)` on `ActionTaken` ensures that when multiple staff members or administrators view and update the same action record, concurrent edits are safely detected and rejected with HTTP 409 Conflict rather than silently overwritten.
 
 ---
 
@@ -193,31 +198,31 @@ model ActionTaken {
 | Method | Endpoint | Authorized Roles in Code | Purpose | Key Responses |
 |---|---|---|---|---|
 | `GET` | `/api/tickets/:id/actions` | Owner Requester, IT Staff, Admin | Get all Actions Taken for ticket | 200 OK, 401 Unauth, 403 Forbidden, 404 Not Found |
-| `POST` | `/api/tickets/:id/actions` | IT Staff, Admin | Create a new Action Taken line | 201 Created, 400 Bad Request, 403 Forbidden, 404 Not Found |
-| `PATCH` | `/api/actions/:id` | IT Staff, Admin | Update an existing Action Taken line | 200 OK, 400 Bad Request, 403 Forbidden, 404 Not Found |
+| `POST` | `/api/tickets/:id/actions` | IT Staff, Admin | Create a new Action Taken line | 201 Created, 400 Bad Request / TICKET_LOCKED, 403 Forbidden, 404 Not Found |
+| `PATCH` | `/api/actions/:id` | Author (`performedById`), Admin (Decision D4) | Update an existing Action Taken line | 200 OK, 400 Bad Request / TICKET_LOCKED, 403 ACTION_EDIT_FORBIDDEN, 404 Not Found, 409 VERSION_CONFLICT |
 | `GET` | `/api/dashboard/requester` | Requester | Authoritative Requester metrics & recent tickets | 200 OK, 401 Unauth, 403 Forbidden |
 | `GET` | `/api/dashboard/staff` | IT Staff, Admin | Authoritative IT Staff & Admin metrics & queue | 200 OK, 401 Unauth, 403 Forbidden |
-| `PATCH` | `/api/staff/tickets/:id/status` | IT Staff (Admin role: TBD) | Update ticket status with resolution gate, owner precondition & OCC | 200 OK, 400 Invalid transition / Owner required, 409 Concurrency Conflict |
+| `PATCH` | `/api/staff/tickets/:id/status` | IT Staff, Admin (Decision D6) | Update ticket status with resolution gate, owner precondition & OCC | 200 OK, 400 Invalid transition / OWNER_REQUIRED / ACTION_REQUIRED, 403 Forbidden, 409 VERSION_CONFLICT |
 
 ---
 
 ## 9. Acceptance Criteria (AC)
 
-- **AC-01:** Given an authenticated IT Staff member and valid action details (description, result, date), when `POST /api/tickets/:id/actions` is called, an Action Taken record is created with `performedById` set to the authenticated staff's user ID.
+- **AC-01:** Given an authenticated IT Staff member and valid action details (description, result, date), when `POST /api/tickets/:id/actions` is called, an Action Taken record is created with `performedById` set to the authenticated staff's user ID and `version` set to 1.
 - **AC-02:** Given an authenticated IT Staff member creating an action with `followUpRequired=true`, when `followUpNote` is empty or omitted, the system returns HTTP 400 with a validation error requiring `followUpNote`.
 - **AC-03:** Given an authenticated IT Staff member creating an action with `followUpRequired=false`, when `followUpNote` is omitted, the action is created successfully with `followUpRequired=false` and null/empty note.
 - **AC-04:** Given an authenticated Requester viewing their own ticket, when `GET /api/tickets/:id/actions` is called, all Actions Taken records for that ticket are returned with complete descriptions, results, and performer details.
 - **AC-05:** Given an authenticated Requester, when `POST /api/tickets/:id/actions` or `PATCH /api/actions/:id` is attempted, the system rejects the request with HTTP 403 Forbidden.
 - **AC-06:** Given an authenticated Requester attempting to fetch actions for a ticket owned by another user, the system responds with HTTP 404 Not Found (preserving foreign resource privacy).
-- **AC-07:** Given an authenticated IT Staff member updating an existing Action Taken via `PATCH /api/actions/:id`, valid edits to description, result, follow-up, or attachment notes are persisted and `updatedAt` is refreshed.
+- **AC-07:** Given an authenticated IT Staff member updating an Action Taken via `PATCH /api/actions/:id`, if the user is the original creator (`performedById`) or an Administrator and `expectedVersion` matches, the update persists and increments `version` (Decision D4, D7). If attempted by another staff member, the backend returns HTTP 403 `ACTION_EDIT_FORBIDDEN`.
 - **AC-08:** Given an inactive IT Staff member's session, when an Action Taken creation or update is attempted, the system rejects the operation with HTTP 403 Forbidden.
 - **AC-09:** Given multiple Actions Taken on a single ticket, when retrieved via API or UI, they are consistently returned in chronological order by `actionDateTime`.
-- **AC-10:** Given an authenticated Requester, when attempting to change ticket status to `RESOLVED` directly via API or UI, the request is rejected with HTTP 403 Forbidden (resolution gate).
+- **AC-10:** Given an authenticated Requester, when attempting to change ticket status to `RESOLVED` directly via API or UI, the request is rejected with HTTP 403 Forbidden (resolution gate). Furthermore, given an IT Staff or Admin attempting to resolve a ticket with 0 Actions Taken, the request is rejected with HTTP 400 `ACTION_REQUIRED` (Decision D2).
 - **AC-11:** Given an authenticated Requester marking a ticket as "appears resolved", the ticket's `appearsResolvedAt` and `appearsResolvedById` are set, but `currentStatus` remains unchanged until an IT Staff member reviews and formally resolves it.
-- **AC-12:** Given an authenticated IT Staff member, when transitioning a ticket through permitted statuses (`NEW` -> `OPEN` -> `IN_PROGRESS` -> `WAITING_FOR_REQUESTER` -> `RESOLVED`), the status changes and is logged.
+- **AC-12:** Given an authenticated IT Staff member or Administrator, when transitioning a ticket through permitted statuses (`NEW` -> `OPEN` -> `IN_PROGRESS` -> `WAITING_FOR_REQUESTER` -> `RESOLVED`), with an eligible active owner and at least one Action Taken for `RESOLVED`, the status transitions successfully and increments `version` (Decision D2, D6).
 - **AC-13:** Given an attempt to perform an illegal transition (e.g. `NEW` directly to `RESOLVED` or modifying a `CANCELLED` ticket), the backend rejects the change with HTTP 400 Bad Request.
-- **AC-14:** Given a ticket update request with `expectedVersion` matching the current version, the update succeeds and increments `version` by 1.
-- **AC-15:** Given two concurrent users updating the same ticket, when the second user submits an outdated `expectedVersion`, the backend returns HTTP 409 Conflict without overwriting the first user's changes.
+- **AC-14:** Given a ticket or Action Taken update request with `expectedVersion` matching the current version, the update succeeds and increments `version` by 1 (Decision D7).
+- **AC-15:** Given two concurrent users updating the same ticket or Action Taken, when the second user submits an outdated `expectedVersion`, the backend returns HTTP 409 Conflict (`VERSION_CONFLICT`) without overwriting the first user's changes (Decision D7).
 - **AC-16:** Given an authenticated Requester requesting `GET /api/dashboard/requester`, the response returns accurate counts for `myOpenTickets`, `inProgress`, `resolved`, `closed`, `waitingForRequester`, and up to 5 `recentlyUpdated` tickets belonging exclusively to that requester.
 - **AC-17:** Given a newly registered Requester with zero tickets, the Requester Dashboard returns zero for all counts and an empty array for recent tickets, displaying friendly empty states in the UI.
 - **AC-18:** Given a Requester clicking a dashboard metric card (e.g. "In Progress"), the UI navigates to `/my-tickets?status=IN_PROGRESS` pre-filtered by that status.
@@ -248,17 +253,18 @@ model ActionTaken {
 
 ---
 
-## 11. Decisions & TBD Questions Table
+## 11. Decisions & Resolution Log
 
-The following design decisions and questions remain under discussion with the user/team and are flagged as **`[TBD]`** (Pending Decision):
+The following key architectural and business-rule decisions have been resolved and agreed upon for Lab 4:
 
-| # | Question / Topic | Current Baseline / Code Status | Proposed Options / Alternatives | Decision Status |
+| # | Question / Topic | Current Baseline / Code Status | Adopted Decision & Rationale | Decision Status |
 |---|---|---|---|---|
-| **D1** | **Ticket Status Transition Matrix** | Baseline code in `server/src/routes/staff.ts:28-37` allows:<br>- `NEW` -> `OPEN`, `CANCELLED`<br>- `OPEN` -> `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `CANCELLED`<br>- `IN_PROGRESS` -> `WAITING_FOR_REQUESTER`, `RESOLVED`, `CANCELLED`<br>- `WAITING_FOR_REQUESTER` -> `IN_PROGRESS`, `RESOLVED`, `CANCELLED`<br>- `RESOLVED` -> `CLOSED`, `REOPENED`<br>- `CLOSED` -> `REOPENED`<br>- `REOPENED` -> `OPEN`, `IN_PROGRESS`, `CANCELLED`<br>- `CANCELLED` -> `[]` | **Option A (Adopted):** Keep existing 8-state matrix in `staff.ts` exactly as implemented.<br>**Option B:** Add direct transitions like `NEW`->`IN_PROGRESS`, `OPEN`->`RESOLVED`, etc. | **Decided:** Option A (Keep baseline code matrix) |
-| **D2** | **Resolution Gate & Actions Taken Dependency** | Currently, status update to `RESOLVED` checks owner precondition (`OWNER_REQUIRED`), but does not require an `ActionTaken` record. | **Option A:** Require at least one Action Taken record before transitioning to `RESOLVED` (reject with HTTP 400 `ACTION_REQUIRED`).<br>**Option B:** Allow resolving without Actions Taken (advisory only). | `[TBD]` — Pending User Choice |
-| **D3** | **`resolutionNote` field in status transition** | Currently, `PATCH /api/staff/tickets/:id/status` accepts only `{ currentStatus, expectedVersion }`. | **Option A:** Remove `resolutionNote` from request body schema entirely (use Actions Taken / internal notes for resolution context).<br>**Option B:** Add `resolutionNote` to Prisma `Ticket` schema & migration and validate on resolve. | `[TBD]` — Pending User Choice |
-| **D4** | **Actions Taken Edit Permissions** | Handout states IT Staff and Administrators create and update Actions Taken. | **Option A:** Any active IT Staff/Admin can edit any Action Taken record on the ticket.<br>**Option B:** Only the author (`performedById`) or an Admin can edit an existing Action Taken. | `[TBD]` — Pending User Choice |
-| **D5** | **Actions Taken Modification on Closed/Cancelled Tickets** | Not specified in handout. | **Option A:** Actions Taken can only be created/edited on active tickets (block if `RESOLVED`, `CLOSED`, `CANCELLED` with HTTP 400).<br>**Option B:** Permit appending/editing Actions Taken regardless of ticket status. | `[TBD]` — Pending User Choice |
-| **D6** | **Administrator Role on Status Transitions** | `server/src/routes/staff.ts:793` currently uses `requireRole("IT_STAFF")`, blocking `ADMINISTRATOR` with 403. | **Option A:** Change to `requireRole("IT_STAFF", "ADMINISTRATOR")` across all operational routes (`/status`, `/owner`, `/priority`, `/claim`).<br>**Option B:** Keep strictly `IT_STAFF` only as implemented in Lab 3 baseline. | `[TBD]` — Pending User Choice |
-| **D7** | **Optimistic Concurrency on `PATCH /api/actions/:id`** | Actions Taken model has `updatedAt`. | **Option A:** Require `expectedVersion` or timestamp check on `PATCH /api/actions/:id`.<br>**Option B:** Standard partial update without explicit versioning. | `[TBD]` — Pending User Choice |
+| **D1** | **Ticket Status Transition Matrix** | Baseline code in `server/src/routes/staff.ts:28-37` allows:<br>- `NEW` -> `OPEN`, `CANCELLED`<br>- `OPEN` -> `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `CANCELLED`<br>- `IN_PROGRESS` -> `WAITING_FOR_REQUESTER`, `RESOLVED`, `CANCELLED`<br>- `WAITING_FOR_REQUESTER` -> `IN_PROGRESS`, `RESOLVED`, `CANCELLED`<br>- `RESOLVED` -> `CLOSED`, `REOPENED`<br>- `CLOSED` -> `REOPENED`<br>- `REOPENED` -> `OPEN`, `IN_PROGRESS`, `CANCELLED`<br>- `CANCELLED` -> `[]` | **Adopt Option A:** Keep existing 8-state matrix in `staff.ts` exactly as implemented in Lab 3 baseline.<br>*Rationale:* Preserves regression stability and matches established queue behaviors. | **Decided:** Option A (Keep baseline code matrix) |
+| **D2** | **Resolution Gate & Actions Taken Dependency** | Currently, status update to `RESOLVED` checks owner precondition (`OWNER_REQUIRED`), but does not check for Actions Taken. | **Adopt Option A:** Strictly require at least one `ActionTaken` record before transitioning to `RESOLVED`. If zero actions exist, reject with HTTP 400 `ACTION_REQUIRED`.<br>*Rationale:* Enforces the core Lab 4 product requirement that actual technical work must be logged before formal resolution. | **Decided:** Option A (Require $\ge 1$ Action Taken for `RESOLVED`) |
+| **D3** | **`resolutionNote` field in status transition** | Currently, `PATCH /api/staff/tickets/:id/status` accepts only `{ currentStatus, expectedVersion }`. | **Adopt Option A:** Omit `resolutionNote` from status payload schema entirely.<br>*Rationale:* Lab 4 sheet specifies technical details are recorded in Actions Taken (`description`, `result`, `attachmentNotes`) and comments/notes. Avoids redundant schema columns and complex backfills. | **Decided:** Option A (Omit `resolutionNote`; use Actions Taken) |
+| **D4** | **Actions Taken Edit Permissions** | Handout states IT Staff and Administrators create and update Actions Taken. | **Adopt Option B:** Only the original author (`performedById`) or an Administrator can edit an existing Action Taken (`PATCH /api/actions/:id`). Other staff attempting to edit receive HTTP 403 `ACTION_EDIT_FORBIDDEN`.<br>*Rationale:* Protects audit trail integrity and prevents colleagues from accidentally altering another technician's logged work. | **Decided:** Option B (Author or Administrator edit only) |
+| **D5** | **Actions Taken Modification on Locked Tickets** | Not specified in handout. | **Adopt Option A:** Actions Taken can only be created or edited on active tickets. If ticket status is `RESOLVED`, `CLOSED`, or `CANCELLED`, requests are rejected with HTTP 400 `TICKET_LOCKED`.<br>*Rationale:* Guarantees append-only audit stability upon resolution. To add new work, the ticket must be formally reopened first. | **Decided:** Option A (Lock Actions Taken when Resolved/Closed/Cancelled) |
+| **D6** | **Administrator Role on Status Transitions** | `server/src/routes/staff.ts:793` currently enforces `requireRole("IT_STAFF")`, blocking `ADMINISTRATOR` with HTTP 403. | **Adopt Option A:** Permit both `IT_STAFF` and `ADMINISTRATOR` on `PATCH /api/staff/tickets/:id/status` (and other staff operational endpoints). Route guard will be updated to `requireRole("IT_STAFF", "ADMINISTRATOR")` in Phase F2.<br>*Rationale:* Aligns with Handout Section 4.3 ("Administrator: Perform IT Staff behavior and retain administrative access needed for support and testing"). | **Decided:** Option A (Permit `IT_STAFF` and `ADMINISTRATOR`) |
+| **D7** | **Optimistic Concurrency on `PATCH /api/actions/:id`** | Actions Taken model has `updatedAt`. | **Adopt Option A:** Add `version Int @default(1)` to `ActionTaken` model and require `expectedVersion` in `PATCH /api/actions/:id`. Reject stale updates with HTTP 409 `VERSION_CONFLICT`.<br>*Rationale:* Satisfies Handout Section 5.1 & 6.1 for optimistic-concurrency and stale-update detection on all mutated entities. | **Decided:** Option A (Add `version` and enforce OCC on Actions Taken) |
+
 
