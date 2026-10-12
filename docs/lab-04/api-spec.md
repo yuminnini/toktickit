@@ -349,9 +349,14 @@ The following approved endpoints remain functional and unmodified, matching exis
 | `/api/staff/tickets/:id/claim` | `POST` | `IT_STAFF` | `staff.ts` |
 | `/api/staff/tickets/:id/owner` | `PATCH` | `IT_STAFF` | `staff.ts` |
 | `/api/staff/tickets/:id/priority` | `PATCH` | `IT_STAFF` | `staff.ts` |
-| `/api/staff/tickets/:id/status` | `PATCH` | `IT_STAFF` (Baseline) / `IT_STAFF`, `ADMINISTRATOR` (Lab 4 per D6) | `staff.ts` |
+| `/api/staff/tickets/:id/status` | `PATCH` | `IT_STAFF` (Baseline) / `IT_STAFF`, `ADMINISTRATOR` (Lab 4 per D6; status transition only) | `staff.ts` |
 | `/api/admin/users` | `GET`, `POST` | `ADMINISTRATOR` | `admin.ts` |
 | `/api/admin/users/:id` | `PATCH` | `ADMINISTRATOR` | `admin.ts` |
 | `/api/admin/users/:id/reset-password` | `POST` | `ADMINISTRATOR` | `admin.ts` |
+
+> **Note on Decision D6 Scope:**  
+> Administrator role authorization is strictly expanded for the status transition endpoint (`PATCH /api/staff/tickets/:id/status`) to enforce the formal Resolution Gate and ticket lifecycle evaluation (FR-04, BR-09, Handout Section 4.3).  
+> Operational ticket assignment endpoints (`/claim`, `/owner`, `/priority`) are **not** expanded to Administrator and remain strictly restricted to `IT_STAFF`, preserving the Lab 3 baseline access matrix and preventing unnecessary scope changes.
+
 
 

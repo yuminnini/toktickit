@@ -2,7 +2,7 @@
 
 Master Plan: Plan_lab4.md (MUST READ BEFORE STARTING). Scope and authority: AGENTS.md.
 F1=P00–P02; F2=P03–P05; F3=P06–P07; F4=P08–P11; F5=P12–P14.
-Detailed steps, dependencies and exit criteria: Plan_lab4.md & docs/lab-04/PHASES.md.
+Detailed steps, dependencies and exit criteria: Plan_lab4.md.
 Contracts: docs/lab-04/specification.md, api-spec.md, ui-spec.md, tests.md.
 
 For every work package:

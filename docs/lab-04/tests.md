@@ -47,7 +47,7 @@ The test plan implements strict **Specification-Driven Development (Spec DD)** a
 | **T24** | AC-24 | F4/P08 | UI/A11y | Keyboard accessibility & visible focus | All interactive cards, buttons, and inputs navigable via keyboard with visible focus ring. | `client/tests/lab-04/ActionsTaken.test.tsx` | Planned |
 | **T25** | AC-25 | F4/P09 | UI/A11y | Non-color status indicators | Status badges and cards include distinct text labels and icons, not color alone. | `client/tests/lab-04/TicketWorkflow.test.tsx` | Planned |
 | **T26** | AC-26 | F2/P03 | Int/Seed | Idempotent seed data verification | Repeated `db:seed` execution succeeds safely; generates 0, 1, and multi-action tickets. | `server/tests/lab-04/seed.integration.test.ts` | Planned |
-| **T27** | AC-27 | F5/P12 | Regr | Labs 1–3 full regression suite | All previous test suites (auth, queue, comments, notes, attachments, admin) pass 100%. | Full test runner (`npm test`) | Planned |
+| **T27** | AC-27 | F5/P12 | Regr | Labs 1–3 full regression suite with D2/D6 alignment | Previous test suites pass 100%; tests resolving tickets in `staff-ticket-detail.api.test.ts` adapted in F2 to supply prerequisite Action Taken per D2/D6. | Full test runner (`npm test`) | Planned |
 | **T28** | AC-28 | F5/P12 | E2E | End-to-end complete workflow | Playwright E2E executes full lifecycle: create ticket -> dashboard -> actions -> resolve. | `e2e/lab-04/actions-taken-flow.spec.ts` | Planned |
 
 ---

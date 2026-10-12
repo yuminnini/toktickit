@@ -46,7 +46,7 @@
   - Reconciled D6 route roles across `specification.md` (§2, FR-04, BR-09) and `api-spec.md` (§4.1 & §5).
   - Stripped line numbers from `api-spec.md` §5 table and corrected roles.
   - Consolidated documentation roadmap to `Plan_lab4.md`.
-- **Human Review & Adjustment:** Verified that all 3 blocking review items and non-blocking polish items are resolved before PR approval into `lab4-staging`.
+- **Human Review & Adjustment:** Verified that all review items are resolved and documented in `reviewer.md` under PR #49 before approval into `lab4-staging`.
 
 ---
 
