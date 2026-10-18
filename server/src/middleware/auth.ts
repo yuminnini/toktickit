@@ -53,8 +53,8 @@ export async function authenticateSession(req: Request, res: Response, next: Nex
       return next();
     }
 
-    // Check user active status and session version
-    if (!session.user.active || session.sessionVersion !== session.user.sessionVersion) {
+    // Check session version
+    if (session.sessionVersion !== session.user.sessionVersion) {
       await revokeSessionByHash(tokenHash);
       return next();
     }
@@ -92,6 +92,12 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
       message: "Authentication required",
     });
   }
+  if (!req.user.active && req.user.role === "REQUESTER") {
+    return res.status(401).json({
+      error: "UNAUTHENTICATED",
+      message: "Account is inactive",
+    });
+  }
   return next();
 }
 
@@ -117,6 +123,13 @@ export function requireRole(...allowedRoles: Array<"REQUESTER" | "IT_STAFF" | "A
       return res.status(401).json({
         error: "UNAUTHENTICATED",
         message: "Authentication required",
+      });
+    }
+
+    if (!req.user.active) {
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: "Account is inactive",
       });
     }
 

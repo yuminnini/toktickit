@@ -42,6 +42,7 @@ model User {
   sessions                Session[]
   comments                PublicComment[]
   notes                   InternalNote[]
+  actionsTaken            ActionTaken[]
 
   @@map("RequesterUser")
 }
@@ -109,6 +110,7 @@ model Ticket {
   attachments         Attachment[]
   comments            PublicComment[]
   notes               InternalNote[]
+  actionsTaken        ActionTaken[]
 
   @@index([requesterId])
   @@index([categoryId])
@@ -159,3 +161,24 @@ model Attachment {
 
   @@index([ticketId])
 }
+
+model ActionTaken {
+  id               Int      @id @default(autoincrement())
+  ticketId         Int
+  ticket           Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actionDateTime   DateTime @default(now())
+  description      String
+  result           String
+  performedById    Int
+  performedBy      User     @relation(fields: [performedById], references: [id])
+  followUpRequired Boolean  @default(false)
+  followUpNote     String?
+  attachmentNotes  String?
+  version          Int      @default(1)
+  seedKey          String?  @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([ticketId, actionDateTime])
+  @@index([performedById])
+}

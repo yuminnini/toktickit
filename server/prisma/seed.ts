@@ -201,13 +201,83 @@ export async function seedDatabase(prisma: PrismaClient, initialPassword?: strin
         },
       });
     }
+
+    // 5. Seed Actions Taken (Lab 4 / P03 / AC-26)
+    // Satisfies: 0 actions (NEW/some OPEN), 1 action (WAITING/REOPENED), >1 actions (RESOLVED/CLOSED)
+    let numActions = 0;
+    if (status === "RESOLVED" || status === "CLOSED") {
+      numActions = (i % 2 === 0) ? 2 : 3;
+    } else if (status === "IN_PROGRESS") {
+      numActions = (i % 2 === 0) ? 2 : 1;
+    } else if (status === "WAITING_FOR_REQUESTER" || status === "REOPENED") {
+      numActions = 1;
+    } else if (status === "OPEN" && i % 2 === 0) {
+      numActions = 1;
+    }
+
+    for (let a = 1; a <= numActions; a++) {
+      const followUpRequired = (a === 1 && i % 2 === 1);
+      const followUpNote = followUpRequired
+        ? `Scheduled follow-up verification check for ${sys.name} on ticket #${i}`
+        : null;
+      const attachmentNotes = (a === 2)
+        ? `Refer to attached diagnostics log file.`
+        : null;
+      const actionPerformerId = (a % 2 === 0) ? bobId : aliceId;
+      const actionDateTime = new Date(Date.now() - ((25 - i) * 3600000 * 2) - (a * 1800000));
+
+      await prisma.actionTaken.upsert({
+        where: { seedKey: `seed-action-${ticket.id}-${a}` },
+        update: {},
+        create: {
+          ticketId: ticket.id,
+          actionDateTime,
+          description: `Action #${a}: Inspected and performed maintenance on ${sys.name} for ticket #${i}.`,
+          result: `Step #${a} verified and diagnostic check passed.`,
+          performedById: actionPerformerId,
+          followUpRequired,
+          followUpNote,
+          attachmentNotes,
+          seedKey: `seed-action-${ticket.id}-${a}`,
+          version: 1,
+        },
+      });
+    }
   }
+
+  // Backfill: Ensure any existing legacy tickets in RESOLVED or CLOSED status have at least one Action Taken (Decision D2)
+  const existingResolvedOrClosed = await prisma.ticket.findMany({
+    where: {
+      currentStatus: { in: ["RESOLVED", "CLOSED"] },
+      actionsTaken: { none: {} },
+    },
+  });
+
+  for (const t of existingResolvedOrClosed) {
+    await prisma.actionTaken.upsert({
+      where: { seedKey: `seed-action-backfill-${t.id}` },
+      update: {},
+      create: {
+        ticketId: t.id,
+        actionDateTime: t.updatedAt || new Date(),
+        description: `Historical maintenance action for ticket ${t.ticketNumber}`,
+        result: `Technical issue verified resolved.`,
+        performedById: aliceId,
+        followUpRequired: false,
+        seedKey: `seed-action-backfill-${t.id}`,
+        version: 1,
+      },
+    });
+  }
+
+  const totalActions = await prisma.actionTaken.count();
 
   return {
     categories: CATEGORIES.length,
     relatedSystems: RELATED_SYSTEMS.length,
     users: USERS.length,
     tickets: 24,
+    actionsTaken: totalActions,
   };
 }
 

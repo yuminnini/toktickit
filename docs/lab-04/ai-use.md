@@ -57,13 +57,27 @@
   - Linked GitHub Issue #48 to PR #49 in `reviewer.md`.
   - Updated F1 status to `Approved (Ready to Merge)` in `reviewer.md`.
   - Documented prerequisite fixture requirements for Lab 3 tests (`staff-ticket-detail.api.test.ts:399, 508`) under D2 (`ACTION_REQUIRED`) for Phase F2 implementation.
-- **Human Review & Adjustment:** Phase F1 engineering contract sprint completed and formally approved with genuine peer evidence.
+### Prompt 5: Phase F2 — Database Increment & Actions Taken Backend (P03–P05)
+- **Date / Model:** 2026-10-18 | Gemini 3.8 Flash (High)
+- **Purpose:** Execute Phase F2 (Issue #50): Prisma migration for `ActionTaken`, idempotent seed data (AC-26), Actions Taken REST API & Authorization (AC-01 to AC-09, AC-22), and Ticket Workflow Resolution Gate & OCC (AC-10 to AC-15).
+- **Input Prompt:**
+  > "สวัสดีครับ เนื่องจากเพื่อนเราได้รีวิวและกดmerge F1 ให้แล้ว ลิ้งก์นี้ https://github.com/yuminnini/toktickit/pull/49 ต่อไปเราจะเริ่มทำF2 กัน โดยจะเริ่มจากการสร้างnew issueก่อน อยากให้คุณบอกวิธีสร้างnew issue พร้อมบอกtitle and description ด้วย"
+  > "เราสร้างแล้วโดยเลขคือ#50 แล้วลากมันอยุ่ในช่องstarted แล้วต่อไปตาคุณจัดการต่อได้"
+- **Relevant Output:**
+  - Fast-forwarded `lab4-staging` from merged PR #49 (`9df3c6c`) and created branch `codex/lab4-p03-p05-actions-taken-backend`.
+  - Added `ActionTaken` model in `server/prisma/schema.prisma` with compound index on `[ticketId, actionDateTime]`, `performedById`, and `version` (Decision D7).
+  - Created migration `20261018000000_lab4_actions_taken` and deployed to dev and test databases.
+  - Implemented idempotent seed data with tickets spanning 0, 1, and multiple Actions Taken, plus backfill for existing closed/resolved tickets (AC-26).
+  - Implemented `server/src/routes/actions.ts` (`GET/POST /api/tickets/:id/actions`, `PATCH /api/actions/:id`), auto-binding actor, validating follow-up notes, enforcing Decision D4 (Author/Admin edit only) and Decision D5 (`400 TICKET_LOCKED` on resolved/closed/cancelled).
+  - Updated `server/src/routes/staff.ts` status transition to enforce Decision D2 (`400 ACTION_REQUIRED` when resolving with 0 actions) and Decision D6 (`requireRole("IT_STAFF", "ADMINISTRATOR")`).
+  - Added comprehensive automated API tests (`server/tests/lab-04/actions-taken.api.test.ts`, `ticket-workflow.api.test.ts`, `seed.integration.test.ts`) passing 17/17 tests, while full regression suite passed 100% (273 total passing tests across server and client).
+- **Human Review & Adjustment:** Verified that all 15 ACs for Phase F2 are green with zero regression on Lab 1–3 suites.
 
 ---
 
 ## 3. My Reflection on Specification-Agent & Coding-Agent Use
 
-Working with an AI Specification Agent during Phase F1 provided immense clarity and structure before writing a single line of backend or frontend code:
+Working with an AI Specification Agent and Coding Agent across Phases F1 and F2 demonstrated the power of Specification-Driven and Test-Driven Development:
 1. **Preventing Scope Creep:** The AI agent helped strictly demarcate what is in-scope (Actions Taken parent-child records, resolution gates, authoritative dashboards) versus what is explicitly excluded by the professor (SLA clocks, email notifications, BI warehouses).
-2. **Contract-First Rigor (Spec DD):** By locking down the REST API shapes, validation constraints (e.g. `followUpNote` mandatory only when `followUpRequired = true`), and the 8-state transition matrix early, we eliminated ambiguous design questions that could have caused costly rework during frontend-backend integration.
-3. **Traceability as Quality Assurance:** Mapping all 28 Acceptance Criteria (AC-01 through AC-28) to concrete planned test files establishes an objective, measurable definition of done that can be validated via automated test runs on `main`.
+2. **Contract-First Rigor (Spec DD):** By locking down the REST API shapes, validation constraints (e.g. `followUpNote` mandatory only when `followUpRequired = true`), and the 8-state transition matrix early, we eliminated ambiguous design questions that could have caused costly rework during backend implementation.
+3. **Traceability & Regression Shield (Test DD):** By observing meaningful failing tests before implementing the Prisma model and routes, and verifying both new Lab 4 suites and previous Lab 1–3 suites pass 100% (187 server tests + 86 client tests = 273 total passing tests), we guaranteed zero regression and absolute compliance with engineering contracts.

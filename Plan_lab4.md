@@ -95,28 +95,32 @@ flowchart TD
 ### 🟢 Phase F2: Database Increment & Actions Taken Backend (P03 – P05)
 *วัตถุประสงค์: ขยายสกีมาฐานข้อมูล, ระบบ Seed และพัฒนา API จัดการ Actions Taken และ Workflow*
 
-- [ ] **P03: Prisma Migration & Idempotent Seed Data**
+- [x] **P03: Prisma Migration & Idempotent Seed Data** (Completed)
   - เพิ่ม Model `ActionTaken` ใน `server/prisma/schema.prisma`:
-    - ฟิลด์: `id`, `ticketId`, `actionDateTime`, `description`, `result`, `performedById`, `followUpRequired`, `followUpNote`, `attachmentNotes`, `createdAt`, `updatedAt`
+    - ฟิลด์: `id`, `ticketId`, `actionDateTime`, `description`, `result`, `performedById`, `followUpRequired`, `followUpNote`, `attachmentNotes`, `version`, `createdAt`, `updatedAt`
     - ความสัมพันธ์: `Ticket` (1:N), `User` (N:1 สำหรับ performedBy)
-    - Indexes สำหรับ Query และ Performance
-  - สร้าง Prisma migration ที่รักษาข้อมูลเก่า (Non-destructive)
+    - Indexes สำหรับ Query และ Performance (`[ticketId, actionDateTime]`, `performedById`)
+  - สร้าง Prisma migration `20261018000000_lab4_actions_taken` ที่รักษาข้อมูลเก่า (Non-destructive)
   - ปรับปรุง `seed.ts` ให้เป็น Idempotent: สร้างข้อมูลทดสอบ Actions Taken (Tickets ที่มี 0, 1 และหลาย actions; ค่า follow-up หลากหลาย)
-- [ ] **P04: Actions Taken REST API & Authorization**
+- [x] **P04: Actions Taken REST API & Authorization** (Completed)
   - Implement endpoints:
     - `POST /api/tickets/:id/actions` (สร้าง Actions Taken)
-    - `GET /api/tickets/:id/actions` (ดึงรายการ Actions Taken)
-    - `PATCH /api/actions/:id` (แก้ไข Actions Taken)
+    - `GET /api/tickets/:id/actions` (ดึงรายการ Actions Taken เรียงตามเวลา)
+    - `PATCH /api/actions/:id` (แก้ไข Actions Taken พร้อม OCC)
   - Authorization & Validation:
-    - Performed by ต้องผูกกับ session user อัตโนมัติ (ห้าม spoof)
-    - ตรวจสอบสถานะ User ต้อง active (ปฏิเสธ inactive user)
+    - Performed by ผูกกับ session user อัตโนมัติ (`req.user.id`)
+    - ตรวจสอบสถานะ User active (ปฏิเสธ inactive user ด้วย 403)
     - Validation: ถ้า `followUpRequired = true` ต้องระบุ `followUpNote`
-    - Requester อ่านได้อย่างเดียวสำหรับ ticket ของตน (ห้ามสร้าง/แก้ไข, ticket คนอื่นได้ 404/403)
-- [ ] **P05: Ticket Workflow, Resolution Gate & Concurrency Control**
+    - Requester อ่านได้อย่างเดียวสำหรับ ticket ของตน (ห้ามสร้าง/แก้ไข ได้ 403; ticket คนอื่นได้ 404)
+    - Decision D4: แก้ไขได้เฉพาะ Author หรือ Administrator (staff อื่นได้ 403 ACTION_EDIT_FORBIDDEN)
+    - Decision D5: ปฏิเสธการเพิ่ม/แก้ไขบน locked tickets (RESOLVED/CLOSED/CANCELLED) ด้วย 400 TICKET_LOCKED
+- [x] **P05: Ticket Workflow, Resolution Gate & Concurrency Control** (Completed)
   - Implement Status Transition Matrix ที่ Backend:
-    - สถานะ: `New` -> `Open` -> `In Progress` -> `Waiting for Requester` -> `Resolved` -> `Closed` (หรือ `Reopened`, `Cancelled`)
-    - Resolution Gate: Requester ส่งคำขอแจ้งว่าปัญหาคลี่คลายได้เพียง Advisory; การเปลี่ยนเป็น `Resolved` ต้องทำโดย IT Staff เท่านั้น
-  - Optimistic Concurrency Control: ส่ง `expectedVersion` หรือเช็ค timestamp เพื่อป้องกัน Stale update (ส่ง HTTP 409 Conflict เมื่อมีคนแก้ตัดหน้า)
+    - สถานะ 8 สถานะตาม Baseline เดิม
+    - Resolution Gate (Decision D2): Transition สู่ `RESOLVED` ต้องมีเจ้าหน้าที่ active owner และมี Actions Taken อย่างน้อย 1 รายการ (หากไม่มี คืน 400 ACTION_REQUIRED)
+    - Decision D6: สิทธิ์การเปลี่ยนสถานะครอบคลุมทั้ง `IT_STAFF` และ `ADMINISTRATOR`
+    - Requester ส่งคำขอ advisory แจ้งปัญหาดูเหมือนคลี่คลาย (`POST /api/tickets/:id/appears-resolved`) โดยไม่เปลี่ยนสถานะตั๋ว
+  - Optimistic Concurrency Control: ตรวจสอบ `expectedVersion` คืน 409 VERSION_CONFLICT เมื่อชนกัน
 
 ---
 
