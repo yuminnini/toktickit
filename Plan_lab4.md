@@ -127,7 +127,7 @@ flowchart TD
 ### 🟢 Phase F3: Authoritative Dashboard Backend (P06 – P07)
 *วัตถุประสงค์: สร้าง API สำหรับ Dashboard ที่คำนวณจากฐานข้อมูลอย่างถูกต้อง รวดเร็ว และปลอดภัย*
 
-- [ ] **P06: Requester Dashboard API**
+- [x] **P06: Requester Dashboard API** (Completed)
   - Endpoint `GET /api/dashboard/requester`
   - คำนวณ Metrics เฉพาะของ Requester ปัจจุบัน:
     1. Total Open Tickets
@@ -136,7 +136,7 @@ flowchart TD
     4. Recently Resolved Tickets
   - ส่ง Recent Tickets (สูงสุด 5 รายการ) พร้อม status, updated time และ drill-down params
   - Data isolation: ห้ามมีข้อมูลตั๋วของผู้อื่นปนเปื้อนเด็ดขาด
-- [ ] **P07: IT Staff & Admin Dashboard API**
+- [x] **P07: IT Staff & Admin Dashboard API** (Completed)
   - Endpoint `GET /api/dashboard/staff`
   - คำนวณ Metrics:
     1. New / Unassigned Tickets
