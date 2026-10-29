@@ -73,11 +73,24 @@
   - Added comprehensive automated API tests (`server/tests/lab-04/actions-taken.api.test.ts`, `ticket-workflow.api.test.ts`, `seed.integration.test.ts`) passing 17/17 tests, while full regression suite passed 100% (273 total passing tests across server and client).
 - **Human Review & Adjustment:** Verified that all 15 ACs for Phase F2 are green with zero regression on Lab 1–3 suites.
 
+### Prompt 6: Phase F2 Peer Review Rounds 1 & 2 and Phase F3 — Authoritative Dashboard Backend (P06–P07)
+- **Date / Model:** 2026-10-29 | Gemini 4 Argon (Medium)
+- **Purpose:** Resolve Round 2 peer review on PR #51 (returning `403 FORBIDDEN` on inactive staff session while immediately revoking the session in DB, and handling `{ followUpNote: null, expectedVersion: 1 }` when `followUpRequired` is already `false`), then implement Phase F3 (Issue #52): Requester Dashboard (`GET /api/dashboard/requester`) and IT Staff/Admin Dashboard (`GET /api/dashboard/staff`).
+- **Input Prompt:**
+  > "เพื่อนส่งรีวิวมาอีกครั้งครับ Verified Fixes from Round 1 ... Remaining Issues to Address Before Approval: 1. [P1] Inactive Staff Mutation Returns 401 Instead of 403 FORBIDDEN ... 2. [P2] PATCH /api/actions/:id With { followUpNote: null, expectedVersion: 1 } When followUpRequired is Already false"
+  > "เพื่อนของเรากดmergeเรียบร้อยแล้ว พร้อมทำF3ต่อเลยครับ โดยจะให้สร้างnew pull requestกับnew issue ก่อน"
+- **Relevant Output:**
+  - Resolved PR #51 Round 2 items (`694f2a7`) and merged into `lab4-staging` (`00bf767`).
+  - Created Issue #52 and feature branch `codex/lab4-p06-p07-dashboard-backend`.
+  - Followed TDD (Red → Green): wrote `server/tests/lab-04/requester-dashboard.api.test.ts` (T16, T17, T22) and `server/tests/lab-04/staff-dashboard.api.test.ts` (T19, T21, T22), observed 404 failures, then implemented `server/src/routes/dashboard.ts` and mounted at `/api/dashboard` in `server/src/app.ts`.
+  - Verified all 29 server test suites (197 tests) pass 100%.
+- **Human Review & Adjustment:** Confirmed strict requester data isolation, 8-status & 3-priority aggregations for IT Staff, and `userStats` extension exclusively for Administrators.
+
 ---
 
 ## 3. My Reflection on Specification-Agent & Coding-Agent Use
 
-Working with an AI Specification Agent and Coding Agent across Phases F1 and F2 demonstrated the power of Specification-Driven and Test-Driven Development:
+Working with an AI Specification Agent and Coding Agent across Phases F1–F3 demonstrated the power of Specification-Driven and Test-Driven Development:
 1. **Preventing Scope Creep:** The AI agent helped strictly demarcate what is in-scope (Actions Taken parent-child records, resolution gates, authoritative dashboards) versus what is explicitly excluded by the professor (SLA clocks, email notifications, BI warehouses).
 2. **Contract-First Rigor (Spec DD):** By locking down the REST API shapes, validation constraints (e.g. `followUpNote` mandatory only when `followUpRequired = true`), and the 8-state transition matrix early, we eliminated ambiguous design questions that could have caused costly rework during backend implementation.
-3. **Traceability & Regression Shield (Test DD):** By observing meaningful failing tests before implementing the Prisma model and routes, and verifying both new Lab 4 suites and previous Lab 1–3 suites pass 100% (187 server tests + 86 client tests = 273 total passing tests), we guaranteed zero regression and absolute compliance with engineering contracts.
+3. **Traceability & Regression Shield (Test DD):** By observing meaningful failing tests before implementing the Prisma model and routes, and verifying both new Lab 4 suites and previous Lab 1–3 suites pass 100% (197 server tests + 86 client tests = 283 total passing tests), we guaranteed zero regression and absolute compliance with engineering contracts.

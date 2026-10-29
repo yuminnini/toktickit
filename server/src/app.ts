@@ -19,6 +19,7 @@ import { staffRouter } from "./routes/staff.js";
 import { communicationsRouter } from "./routes/communications.js";
 import { adminRouter } from "./routes/admin.js";
 import { actionsRouter } from "./routes/actions.js";
+import { dashboardRouter } from "./routes/dashboard.js";
 import {
   authenticateSession,
   requireAuth,
@@ -93,6 +94,9 @@ app.use("/api/tickets", communicationsRouter);
 
 // Actions Taken Routes
 app.use("/api", actionsRouter);
+
+// Dashboard Routes
+app.use("/api/dashboard", dashboardRouter);
 
 // Health Check
 app.get("/api/health", (_req: Request, res: Response) => {
