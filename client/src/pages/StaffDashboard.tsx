@@ -64,7 +64,7 @@ export default function StaffDashboard() {
     {
       id: "metric-card-new",
       label: "New",
-      count: data.queueMetrics.NEW,
+      count: data.new,
       path: "/staff/tickets?status=NEW",
       accent: "#355C7D",
       icon: "🆕",
@@ -72,7 +72,7 @@ export default function StaffDashboard() {
     {
       id: "metric-card-open",
       label: "Open",
-      count: data.queueMetrics.OPEN,
+      count: data.open,
       path: "/staff/tickets?status=OPEN",
       accent: "#006B3C",
       icon: "📂",
@@ -80,7 +80,7 @@ export default function StaffDashboard() {
     {
       id: "metric-card-in-progress",
       label: "In Progress",
-      count: data.queueMetrics.IN_PROGRESS,
+      count: data.inProgress,
       path: "/staff/tickets?status=IN_PROGRESS",
       accent: "#8C4A00",
       icon: "⚙️",
@@ -88,7 +88,7 @@ export default function StaffDashboard() {
     {
       id: "metric-card-waiting",
       label: "Waiting for Requester",
-      count: data.queueMetrics.WAITING_FOR_REQUESTER,
+      count: data.waitingForRequester,
       path: "/staff/tickets?status=WAITING_FOR_REQUESTER",
       accent: "#8C4A00",
       icon: "⏳",
@@ -96,7 +96,7 @@ export default function StaffDashboard() {
     {
       id: "metric-card-my-assigned",
       label: "My Assigned",
-      count: data.queueMetrics.myAssigned,
+      count: data.myAssigned,
       path: "/staff/tickets?owner=mine",
       accent: "#0B7A46",
       icon: "👤",
@@ -234,10 +234,10 @@ export default function StaffDashboard() {
                     <tr>
                       <th>Ticket No.</th>
                       <th>Summary</th>
-                      <th>Category</th>
                       <th>Status</th>
                       <th>Priority</th>
-                      <th>Requester</th>
+                      <th>Owner</th>
+                      <th>Updated</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -252,14 +252,22 @@ export default function StaffDashboard() {
                           {item.ticketNumber}
                         </td>
                         <td className="fw-medium">{item.summary}</td>
-                        <td>{item.category.name}</td>
                         <td>
                           <Badge type="status" value={item.currentStatus} />
                         </td>
                         <td>
                           <Badge type="priority" value={item.itPriority} />
                         </td>
-                        <td>{item.requester.name}</td>
+                        <td>
+                          {item.ticketOwner ? (
+                            <span>{item.ticketOwner.name}</span>
+                          ) : (
+                            <span className="text-muted fst-italic">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="text-muted">
+                          {new Date(item.updatedAt).toLocaleDateString()}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -304,3 +312,4 @@ export default function StaffDashboard() {
     </div>
   );
 }
+

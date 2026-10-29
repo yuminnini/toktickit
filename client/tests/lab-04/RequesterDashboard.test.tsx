@@ -17,17 +17,11 @@ const mockRequesterUser: api.SafeUser = {
 };
 
 const sampleRequesterDashboard: api.RequesterDashboardResponse = {
-  totalTickets: 7,
-  byStatus: {
-    NEW: 1,
-    OPEN: 1,
-    IN_PROGRESS: 2,
-    WAITING_FOR_REQUESTER: 0,
-    REOPENED: 0,
-    RESOLVED: 2,
-    CLOSED: 1,
-    CANCELLED: 0,
-  },
+  myOpenTickets: 4,
+  inProgress: 2,
+  resolved: 2,
+  closed: 1,
+  waitingForRequester: 0,
   recentlyUpdated: [
     {
       id: 701,
@@ -37,7 +31,6 @@ const sampleRequesterDashboard: api.RequesterDashboardResponse = {
       currentStatus: "IN_PROGRESS",
       requestedPriority: "HIGH",
       itPriority: "HIGH",
-      ticketOwner: { id: 10, name: "Alice IT Support" },
       updatedAt: "2026-10-29T10:00:00.000Z",
     },
   ],
@@ -142,17 +135,11 @@ describe("Requester Dashboard & Status Card Drill-Down (P11 / T18 / AC-17, AC-18
 
   it("renders friendly empty state with Submit a Ticket button when requester has zero tickets (AC-17)", async () => {
     vi.spyOn(api, "fetchRequesterDashboard").mockResolvedValue({
-      totalTickets: 0,
-      byStatus: {
-        NEW: 0,
-        OPEN: 0,
-        IN_PROGRESS: 0,
-        WAITING_FOR_REQUESTER: 0,
-        REOPENED: 0,
-        RESOLVED: 0,
-        CLOSED: 0,
-        CANCELLED: 0,
-      },
+      myOpenTickets: 0,
+      inProgress: 0,
+      resolved: 0,
+      closed: 0,
+      waitingForRequester: 0,
       recentlyUpdated: [],
     });
 

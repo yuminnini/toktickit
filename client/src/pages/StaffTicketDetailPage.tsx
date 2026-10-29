@@ -102,16 +102,18 @@ export default function StaffTicketDetailPage() {
 
   useEffect(() => {
     loadTicket(true);
-    fetchEligibleOwners()
-      .then((owners) => setEligibleOwners(owners))
-      .catch(() => {});
+    if (user?.role === "IT_STAFF") {
+      fetchEligibleOwners()
+        .then((owners) => setEligibleOwners(owners))
+        .catch(() => {});
+    }
 
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
-  }, [loadTicket]);
+  }, [loadTicket, user?.role]);
 
   // Claim Ticket
   const handleClaim = async () => {
@@ -231,6 +233,7 @@ export default function StaffTicketDetailPage() {
 
   const validTransitions = VALID_STATUS_TRANSITIONS[ticket.currentStatus] || [];
   const activeAttachments = (ticket.attachments || []).filter((a) => !a.removedAt);
+  const isItStaff = user?.role === "IT_STAFF";
 
   return (
     <div className="zen-container py-4">
@@ -403,51 +406,57 @@ export default function StaffTicketDetailPage() {
                     <span className="fw-semibold small">👤 {ticket.ticketOwner.name}</span>
                     <Badge type="role" value="IT_STAFF" />
                   </div>
-                  <label htmlFor="reassign-select" className="form-label small text-muted">
-                    Reassign to another staff:
-                  </label>
-                  <div className="d-flex gap-2">
-                    <select
-                      id="reassign-select"
-                      className="form-select form-select-sm"
-                      value={selectedOwnerId}
-                      onChange={(e) => setSelectedOwnerId(Number(e.target.value))}
-                      disabled={submitting}
-                    >
-                      {eligibleOwners.map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.name} ({o.role === "ADMINISTRATOR" ? "Admin" : "Staff"})
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="btn btn-zen-secondary btn-sm text-nowrap"
-                      disabled={submitting || Number(selectedOwnerId) === ticket.ticketOwner.id}
-                      onClick={() => {
-                        setPendingOwnerId(Number(selectedOwnerId));
-                        setShowOwnerModal(true);
-                      }}
-                      data-testid="reassign-owner-btn"
-                    >
-                      Reassign
-                    </button>
-                  </div>
+                  {isItStaff && (
+                    <>
+                      <label htmlFor="reassign-select" className="form-label small text-muted">
+                        Reassign to another staff:
+                      </label>
+                      <div className="d-flex gap-2">
+                        <select
+                          id="reassign-select"
+                          className="form-select form-select-sm"
+                          value={selectedOwnerId}
+                          onChange={(e) => setSelectedOwnerId(Number(e.target.value))}
+                          disabled={submitting}
+                        >
+                          {eligibleOwners.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.name} ({o.role === "ADMINISTRATOR" ? "Admin" : "Staff"})
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn btn-zen-secondary btn-sm text-nowrap"
+                          disabled={submitting || Number(selectedOwnerId) === ticket.ticketOwner.id}
+                          onClick={() => {
+                            setPendingOwnerId(Number(selectedOwnerId));
+                            setShowOwnerModal(true);
+                          }}
+                          data-testid="reassign-owner-btn"
+                        >
+                          Reassign
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ) : (
                 <div>
                   <div className="alert alert-warning py-2 small mb-2">
                     ⚠️ Currently unassigned
                   </div>
-                  <button
-                    type="button"
-                    className="btn btn-zen-primary btn-sm w-100 fw-bold"
-                    onClick={handleClaim}
-                    disabled={submitting}
-                    data-testid="claim-ticket-btn"
-                  >
-                    {submitting ? "Claiming..." : "🖐️ Claim This Ticket"}
-                  </button>
+                  {isItStaff && (
+                    <button
+                      type="button"
+                      className="btn btn-zen-primary btn-sm w-100 fw-bold"
+                      onClick={handleClaim}
+                      disabled={submitting}
+                      data-testid="claim-ticket-btn"
+                    >
+                      {submitting ? "Claiming..." : "🖐️ Claim This Ticket"}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -468,7 +477,7 @@ export default function StaffTicketDetailPage() {
                   className="form-select form-select-sm"
                   value={selectedItPriority}
                   onChange={(e) => handleItPriorityChange(e.target.value as PriorityType)}
-                  disabled={submitting}
+                  disabled={submitting || !isItStaff}
                   data-testid="it-priority-select"
                 >
                   <option value="LOW">Low</option>

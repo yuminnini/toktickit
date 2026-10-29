@@ -1031,26 +1031,19 @@ export interface RequesterDashboardRecentTicket {
   id: number;
   ticketNumber: string;
   summary: string;
-  category: { id: number; name: string };
   currentStatus: TicketStatusType;
   requestedPriority: PriorityType;
   itPriority: PriorityType;
-  ticketOwner: { id: number; name: string } | null;
   updatedAt: string;
+  category: { id: number; name: string };
 }
 
 export interface RequesterDashboardResponse {
-  totalTickets: number;
-  byStatus: {
-    NEW: number;
-    OPEN: number;
-    IN_PROGRESS: number;
-    WAITING_FOR_REQUESTER: number;
-    REOPENED: number;
-    RESOLVED: number;
-    CLOSED: number;
-    CANCELLED: number;
-  };
+  myOpenTickets: number;
+  inProgress: number;
+  resolved: number;
+  closed: number;
+  waitingForRequester: number;
   recentlyUpdated: RequesterDashboardRecentTicket[];
 }
 
@@ -1058,26 +1051,33 @@ export interface StaffDashboardRecentQueueItem {
   id: number;
   ticketNumber: string;
   summary: string;
-  category: { id: number; name: string };
   currentStatus: TicketStatusType;
+  requestedPriority: PriorityType;
   itPriority: PriorityType;
-  requester: { id: number; name: string };
   ticketOwner: { id: number; name: string } | null;
   updatedAt: string;
 }
 
 export interface StaffDashboardResponse {
-  queueMetrics: {
+  new: number;
+  open: number;
+  inProgress: number;
+  waitingForRequester: number;
+  myAssigned: number;
+  byStatus: {
     NEW: number;
     OPEN: number;
     IN_PROGRESS: number;
     WAITING_FOR_REQUESTER: number;
-    REOPENED: number;
     RESOLVED: number;
     CLOSED: number;
+    REOPENED: number;
     CANCELLED: number;
-    myAssigned: number;
-    unassigned: number;
+  };
+  byPriority: {
+    HIGH: number;
+    MEDIUM: number;
+    LOW: number;
   };
   recentQueue: StaffDashboardRecentQueueItem[];
   userStats?: {

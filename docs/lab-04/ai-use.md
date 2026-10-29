@@ -98,7 +98,7 @@
   - Enhanced `Badge.tsx` with distinct non-color icons (`data-testid="badge-icon"`) alongside explicit text labels across all 8 statuses and 3 priorities (AC-25 / T25).
   - Implemented `StaffDashboard.tsx` (5 interactive metric cards with keyboard & click drill-down, Admin `userStats` overview, recent queue, quick actions) and `RequesterDashboard.tsx` (4 interactive metric cards, recent tickets, empty-state CTA, quick actions).
   - Added 4 automated client test suites in `client/tests/lab-04/` (`ActionsTaken.test.tsx`, `TicketWorkflow.test.tsx`, `StaffDashboard.test.tsx`, `RequesterDashboard.test.tsx`).
-- **Human Review & Adjustment:** Verified 100% pass rate across all 19 client test suites (101 client tests) and 29 server test suites (197 server tests) = 298 total automated tests with zero regression.
+- **Human Review & Adjustment:** Verified 100% pass rate across all 19 client test suites (102 client tests) and 29 server test suites (197 server tests) = 299 total automated tests with zero regression.
 
 ---
 
@@ -107,4 +107,4 @@
 Working with an AI Specification Agent and Coding Agent across Phases F1–F4 demonstrated the power of Specification-Driven and Test-Driven Development:
 1. **Preventing Scope Creep:** The AI agent helped strictly demarcate what is in-scope (Actions Taken parent-child records, resolution gates, authoritative dashboards) versus what is explicitly excluded by the professor (SLA clocks, email notifications, BI warehouses).
 2. **Contract-First Rigor (Spec DD):** By locking down the REST API shapes, validation constraints (e.g. `followUpNote` mandatory only when `followUpRequired = true`), and the 8-state transition matrix early, we eliminated ambiguous design questions that could have caused costly rework during backend and frontend implementation.
-3. **Traceability & Regression Shield (Test DD):** By observing meaningful failing tests before implementing the Prisma model, backend routes, and React components, and verifying both new Lab 4 suites and previous Lab 1–3 suites pass 100% (197 server tests + 101 client tests = 298 total passing tests), we guaranteed zero regression and absolute compliance with engineering contracts.
+3. **Traceability & Regression Shield (Test DD):** By observing meaningful failing tests before implementing the Prisma model, backend routes, and React components, and verifying both new Lab 4 suites and previous Lab 1–3 suites pass 100% (197 server tests + 102 client tests = 299 total passing tests), we guaranteed zero regression and absolute compliance with engineering contracts.

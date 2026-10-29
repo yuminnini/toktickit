@@ -25,7 +25,12 @@ const mockAdminUser: api.SafeUser = {
 };
 
 const sampleStaffDashboardData: api.StaffDashboardResponse = {
-  queueMetrics: {
+  new: 3,
+  open: 4,
+  inProgress: 2,
+  waitingForRequester: 1,
+  myAssigned: 6,
+  byStatus: {
     NEW: 3,
     OPEN: 4,
     IN_PROGRESS: 2,
@@ -34,18 +39,20 @@ const sampleStaffDashboardData: api.StaffDashboardResponse = {
     RESOLVED: 5,
     CLOSED: 8,
     CANCELLED: 0,
-    myAssigned: 6,
-    unassigned: 3,
+  },
+  byPriority: {
+    HIGH: 4,
+    MEDIUM: 3,
+    LOW: 3,
   },
   recentQueue: [
     {
       id: 401,
       ticketNumber: "TKT-2026-000401",
       summary: "Core router latency spike",
-      category: { id: 2, name: "Network" },
       currentStatus: "IN_PROGRESS",
+      requestedPriority: "HIGH",
       itPriority: "HIGH",
-      requester: { id: 1, name: "Jane Requester" },
       ticketOwner: { id: 10, name: "Alice IT Support" },
       updatedAt: "2026-10-29T11:00:00.000Z",
     },
@@ -190,3 +197,4 @@ describe("IT Staff & Administrator Dashboard (P10 / T20 / AC-19, AC-20, AC-21, A
     });
   });
 });
+

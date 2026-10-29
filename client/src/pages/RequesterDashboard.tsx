@@ -62,18 +62,11 @@ export default function RequesterDashboard() {
     );
   }
 
-  const openCount =
-    data.byStatus.NEW +
-    data.byStatus.OPEN +
-    data.byStatus.IN_PROGRESS +
-    data.byStatus.WAITING_FOR_REQUESTER +
-    data.byStatus.REOPENED;
-
   const metricCards = [
     {
       id: "req-metric-open",
       label: "My Open Tickets",
-      count: openCount,
+      count: data.myOpenTickets,
       path: "/my-tickets",
       accent: "#006B3C",
       icon: "📂",
@@ -81,7 +74,7 @@ export default function RequesterDashboard() {
     {
       id: "req-metric-in-progress",
       label: "In Progress",
-      count: data.byStatus.IN_PROGRESS,
+      count: data.inProgress,
       path: "/my-tickets?status=IN_PROGRESS",
       accent: "#8C4A00",
       icon: "⚙️",
@@ -89,7 +82,7 @@ export default function RequesterDashboard() {
     {
       id: "req-metric-resolved",
       label: "Resolved",
-      count: data.byStatus.RESOLVED,
+      count: data.resolved,
       path: "/my-tickets?status=RESOLVED",
       accent: "#0B7A46",
       icon: "✓",
@@ -97,7 +90,7 @@ export default function RequesterDashboard() {
     {
       id: "req-metric-closed",
       label: "Closed",
-      count: data.byStatus.CLOSED,
+      count: data.closed,
       path: "/my-tickets?status=CLOSED",
       accent: "#5A6B63",
       icon: "🔒",
@@ -260,3 +253,4 @@ export default function RequesterDashboard() {
     </div>
   );
 }
+

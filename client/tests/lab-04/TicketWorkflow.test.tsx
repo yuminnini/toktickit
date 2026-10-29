@@ -15,6 +15,15 @@ const mockStaffUser: api.SafeUser = {
   mustChangePassword: false,
 };
 
+const mockAdminUser: api.SafeUser = {
+  id: 99,
+  name: "System Administrator",
+  email: "admin@example.com",
+  role: "ADMINISTRATOR",
+  active: true,
+  mustChangePassword: false,
+};
+
 const sampleStaffTicket: api.StaffTicketDetail = {
   id: 301,
   ticketNumber: "TKT-2026-000301",
@@ -43,12 +52,12 @@ const sampleStaffTicket: api.StaffTicketDetail = {
   attachments: [],
 };
 
-function renderStaffDetail() {
+function renderStaffDetail(user: api.SafeUser = mockStaffUser) {
   return render(
     <MemoryRouter initialEntries={["/staff/tickets/301"]}>
       <AuthContext.Provider
         value={{
-          user: mockStaffUser,
+          user,
           isLoading: false,
           login: vi.fn(),
           logout: vi.fn(),
@@ -175,5 +184,28 @@ describe("Ticket Workflow, Resolution Gate & Non-Color Status Cues (P09 / T25 / 
 
     fireEvent.click(screen.getByTestId("refresh-conflict-btn"));
     expect(fetchDetailSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("Decision D6: hides/disables IT_STAFF-only operations (Claim/Reassign/IT Priority/fetchEligibleOwners) for ADMINISTRATOR while keeping Status Transition enabled", async () => {
+    vi.spyOn(api, "fetchStaffTicketDetail").mockResolvedValue(sampleStaffTicket);
+    vi.spyOn(api, "fetchTicketActions").mockResolvedValue([]);
+    const eligibleOwnersSpy = vi.spyOn(api, "fetchEligibleOwners");
+
+    renderStaffDetail(mockAdminUser);
+
+    await waitFor(() => {
+      expect(screen.getByText("TKT-2026-000301")).toBeInTheDocument();
+    });
+
+    // fetchEligibleOwners must NOT be called for ADMINISTRATOR
+    expect(eligibleOwnersSpy).not.toHaveBeenCalled();
+
+    // Reassign button hidden and IT Priority disabled for ADMINISTRATOR
+    expect(screen.queryByTestId("reassign-owner-btn")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("claim-ticket-btn")).not.toBeInTheDocument();
+    expect(screen.getByTestId("it-priority-select")).toBeDisabled();
+
+    // Status transition select remains enabled for ADMINISTRATOR per Decision D6
+    expect(screen.getByTestId("status-transition-select")).not.toBeDisabled();
   });
 });
