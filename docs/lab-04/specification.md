@@ -56,8 +56,8 @@ The stakeholder requires the service desk to transition from simple communicatio
 | **FR-05** | **Ticket Status Transition Matrix:** The backend shall enforce permitted state transitions among the 8 statuses (`NEW`, `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CLOSED`, `REOPENED`, `CANCELLED`). Disallowed transitions must be rejected with HTTP 400 Bad Request. | AC-12, AC-13 |
 | **FR-06** | **Optimistic Concurrency Control:** Ticket mutations (status, owner, priority) and Action Taken edits shall require an `expectedVersion` check (Decision D7). If the record has been modified by another concurrent transaction, the update must fail with HTTP 409 Conflict. | AC-14, AC-15 |
 | **FR-07** | **Requester Dashboard API & UI:** The system shall provide an authoritative dashboard for Requesters summarizing their own tickets: Total Open, Waiting for Requester, Recently Updated, Recently Resolved, with quick actions and clickable drill-down filters. | AC-16, AC-17, AC-18 |
-| **FR-08** | **IT Staff Dashboard API & UI:** The system shall provide an authoritative dashboard for IT Staff summarizing queue metrics: Unassigned, My Assigned, by Status, by IT Priority, Recently Updated, with quick actions and clickable drill-down filters. | AC-19, AC-20, AC-21 |
-| **FR-09** | **Administrator Dashboard Extension:** The system shall allow Administrators to view IT Staff operational metrics plus concise user account statistics (total users, active staff, inactive users). | AC-22 |
+| **FR-08** | **IT Staff Dashboard API & UI:** The system shall provide an authoritative dashboard for IT Staff summarizing queue metrics: Unassigned, My Assigned, by Status, by IT Priority, Recently Updated, with quick actions and clickable drill-down filters. | AC-19, AC-20 |
+| **FR-09** | **Administrator Dashboard Extension:** The system shall allow Administrators to view IT Staff operational metrics plus concise user account statistics (total users, active staff, inactive users). | AC-21 |
 | **FR-10** | **Zen Green Responsive UI & Accessibility:** All Lab 4 screens shall adhere to Zen Green styling, support Mobile (375px), Tablet (768px), and Desktop (1280px+), maintain visible focus, non-color cues, and avoid layout clipping/horizontal overflow. | AC-23, AC-24, AC-25 |
 | **FR-11** | **Regression Preservation & Idempotent Seed:** All previous capabilities (Auth, Attachments, Comments, Notes, Admin User Management) must remain fully operational. Seed data must be safe to execute repeatedly without duplicating records. | AC-26, AC-27, AC-28 |
 
@@ -200,7 +200,7 @@ model ActionTaken {
 | `GET` | `/api/tickets/:id/actions` | Owner Requester, IT Staff, Admin | Get all Actions Taken for ticket | 200 OK, 401 Unauth, 403 Forbidden, 404 Not Found |
 | `POST` | `/api/tickets/:id/actions` | IT Staff, Admin | Create a new Action Taken line | 201 Created, 400 Bad Request / TICKET_LOCKED, 403 Forbidden, 404 Not Found |
 | `PATCH` | `/api/actions/:id` | Author (`performedById`), Admin (Decision D4) | Update an existing Action Taken line | 200 OK, 400 Bad Request / TICKET_LOCKED, 403 ACTION_EDIT_FORBIDDEN, 404 Not Found, 409 VERSION_CONFLICT |
-| `GET` | `/api/dashboard/requester` | Requester | Authoritative Requester metrics & recent tickets | 200 OK, 401 Unauth, 403 Forbidden |
+| `GET` | `/api/dashboard/requester` | Authenticated (Any) | Authoritative Requester metrics & recent tickets | 200 OK, 401 Unauth, 403 Forbidden |
 | `GET` | `/api/dashboard/staff` | IT Staff, Admin | Authoritative IT Staff & Admin metrics & queue | 200 OK, 401 Unauth, 403 Forbidden |
 | `PATCH` | `/api/staff/tickets/:id/status` | IT Staff, Admin (Decision D6) | Update ticket status with resolution gate, owner precondition & OCC | 200 OK, 400 Invalid transition / OWNER_REQUIRED / ACTION_REQUIRED, 403 Forbidden, 409 VERSION_CONFLICT |
 

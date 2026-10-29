@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
@@ -9,9 +9,31 @@ describe("Phase F3 / P07: IT Staff & Admin Dashboard API (T19, T21, T22)", () =>
   let inactiveStaff: { id: number; cookie: string; csrfToken: string };
   let adminUser: { id: number; cookie: string; csrfToken: string };
   let requesterUser: { id: number; cookie: string; csrfToken: string };
+  let categoryId: number;
+  let relatedSystemId: number;
+  const createdTicketIds: number[] = [];
+
+  afterAll(async () => {
+    const prisma = getPrisma();
+    if (createdTicketIds.length > 0) {
+      await prisma.actionTaken.deleteMany({ where: { ticketId: { in: createdTicketIds } } });
+      await prisma.ticket.deleteMany({ where: { id: { in: createdTicketIds } } });
+    }
+  });
 
   beforeEach(async () => {
     const prisma = getPrisma();
+
+    if (createdTicketIds.length > 0) {
+      await prisma.actionTaken.deleteMany({ where: { ticketId: { in: createdTicketIds } } });
+      await prisma.ticket.deleteMany({ where: { id: { in: createdTicketIds } } });
+      createdTicketIds.length = 0;
+    }
+
+    const cat = await prisma.category.findFirst();
+    categoryId = cat!.id;
+    const sys = await prisma.relatedSystem.findFirst({ where: { active: true } });
+    relatedSystemId = sys!.id;
 
     // 1. Active IT Staff (Alice)
     let alice = await prisma.user.findFirst({ where: { email: "staff.alice@example.com" } });
@@ -96,6 +118,39 @@ describe("Phase F3 / P07: IT Staff & Admin Dashboard API (T19, T21, T22)", () =>
   // T19 / AC-19: IT Staff Dashboard authoritative metrics
   it("T19 / AC-19: returns accurate new, open, inProgress, waitingForRequester, myAssigned, byStatus, byPriority, and recentQueue matching database queries", async () => {
     const prisma = getPrisma();
+
+    // Create explicit fixture tickets so recentQueue and active counts are guaranteed non-empty even on an empty DB
+    const tNew = await prisma.ticket.create({
+      data: {
+        ticketNumber: `TKT-SD-NEW-${Date.now()}`,
+        requesterId: requesterUser.id,
+        categoryId,
+        relatedSystemId,
+        summary: "Staff Dash Fixture Unassigned NEW",
+        description: "Fixture ticket in NEW status without owner",
+        requestedPriority: "HIGH",
+        itPriority: "HIGH",
+        currentStatus: "NEW",
+        ticketOwnerId: null,
+      },
+    });
+    createdTicketIds.push(tNew.id);
+
+    const tInProgress = await prisma.ticket.create({
+      data: {
+        ticketNumber: `TKT-SD-INP-${Date.now()}`,
+        requesterId: requesterUser.id,
+        categoryId,
+        relatedSystemId,
+        summary: "Staff Dash Fixture Assigned IN_PROGRESS",
+        description: "Fixture ticket in IN_PROGRESS assigned to Alice",
+        requestedPriority: "MEDIUM",
+        itPriority: "MEDIUM",
+        currentStatus: "IN_PROGRESS",
+        ticketOwnerId: staffAlice.id,
+      },
+    });
+    createdTicketIds.push(tInProgress.id);
 
     // Compute expected authoritative values directly from DB
     const [
@@ -186,22 +241,21 @@ describe("Phase F3 / P07: IT Staff & Admin Dashboard API (T19, T21, T22)", () =>
     });
 
     expect(Array.isArray(res.body.recentQueue)).toBe(true);
+    expect(res.body.recentQueue.length).toBeGreaterThan(0);
     expect(res.body.recentQueue.length).toBe(expectedRecentQueue.length);
     expect(res.body.recentQueue.map((t: any) => t.id)).toEqual(
       expectedRecentQueue.map((t) => t.id)
     );
 
-    if (res.body.recentQueue.length > 0) {
-      const first = res.body.recentQueue[0];
-      expect(first).toHaveProperty("id");
-      expect(first).toHaveProperty("ticketNumber");
-      expect(first).toHaveProperty("summary");
-      expect(first).toHaveProperty("currentStatus");
-      expect(first).toHaveProperty("requestedPriority");
-      expect(first).toHaveProperty("itPriority");
-      expect(first).toHaveProperty("ticketOwner");
-      expect(first).toHaveProperty("updatedAt");
-    }
+    const first = res.body.recentQueue[0];
+    expect(first).toHaveProperty("id");
+    expect(first).toHaveProperty("ticketNumber");
+    expect(first).toHaveProperty("summary");
+    expect(first).toHaveProperty("currentStatus");
+    expect(first).toHaveProperty("requestedPriority");
+    expect(first).toHaveProperty("itPriority");
+    expect(first).toHaveProperty("ticketOwner");
+    expect(first).toHaveProperty("updatedAt");
 
     // IT Staff response must NOT include userStats
     expect(res.body.userStats).toBeUndefined();
@@ -260,3 +314,4 @@ describe("Phase F3 / P07: IT Staff & Admin Dashboard API (T19, T21, T22)", () =>
     expect(inactiveRes.body.error).toBe("FORBIDDEN");
   });
 });
+

@@ -90,7 +90,7 @@
 
 ## 3. My Reflection on Specification-Agent & Coding-Agent Use
 
-Working with an AI Specification Agent and Coding Agent across Phases F1 and F2 demonstrated the power of Specification-Driven and Test-Driven Development:
+Working with an AI Specification Agent and Coding Agent across Phases F1–F3 demonstrated the power of Specification-Driven and Test-Driven Development:
 1. **Preventing Scope Creep:** The AI agent helped strictly demarcate what is in-scope (Actions Taken parent-child records, resolution gates, authoritative dashboards) versus what is explicitly excluded by the professor (SLA clocks, email notifications, BI warehouses).
 2. **Contract-First Rigor (Spec DD):** By locking down the REST API shapes, validation constraints (e.g. `followUpNote` mandatory only when `followUpRequired = true`), and the 8-state transition matrix early, we eliminated ambiguous design questions that could have caused costly rework during backend implementation.
-3. **Traceability & Regression Shield (Test DD):** By observing meaningful failing tests before implementing the Prisma model and routes, and verifying both new Lab 4 suites and previous Lab 1–3 suites pass 100% (187 server tests + 86 client tests = 273 total passing tests), we guaranteed zero regression and absolute compliance with engineering contracts.
+3. **Traceability & Regression Shield (Test DD):** By observing meaningful failing tests before implementing the Prisma model and routes, and verifying both new Lab 4 suites and previous Lab 1–3 suites pass 100% (197 server tests + 86 client tests = 283 total passing tests), we guaranteed zero regression and absolute compliance with engineering contracts.

@@ -212,10 +212,52 @@ describe("Phase F3 / P06: Requester Dashboard API (T16, T17, T22)", () => {
     });
   });
 
-  // T22 / AC-22: Unauthenticated access rejected with 401
-  it("T22 / AC-22: rejects unauthenticated request to GET /api/dashboard/requester with 401 UNAUTHENTICATED", async () => {
+  // T22 / AC-22: Unauthenticated, inactive requester, and mustChangePassword access rejected
+  it("T22 / AC-22: rejects unauthenticated (401), inactive requester (401), and mustChangePassword user (403 PASSWORD_CHANGE_REQUIRED)", async () => {
+    const prisma = getPrisma();
+
+    // 1. Unauthenticated -> 401 UNAUTHENTICATED
     const res = await request(app).get("/api/dashboard/requester");
     expect(res.status).toBe(401);
     expect(res.body.error).toBe("UNAUTHENTICATED");
+
+    // 2. Inactive Requester -> 401 UNAUTHENTICATED
+    const inactiveReqUser = await prisma.user.create({
+      data: {
+        name: "Inactive Requester Dash",
+        email: `req.inactive.${Date.now()}@example.com`,
+        role: "REQUESTER",
+        active: false,
+        mustChangePassword: false,
+      },
+    });
+    createdUserIds.push(inactiveReqUser.id);
+    const inactiveReqSession = await getAuthSessionForUser(inactiveReqUser.id);
+
+    const inactiveRes = await request(app)
+      .get("/api/dashboard/requester")
+      .set("Cookie", inactiveReqSession.cookie);
+    expect(inactiveRes.status).toBe(401);
+    expect(inactiveRes.body.error).toBe("UNAUTHENTICATED");
+
+    // 3. Requester with mustChangePassword: true -> 403 PASSWORD_CHANGE_REQUIRED
+    const mustChangeUser = await prisma.user.create({
+      data: {
+        name: "Must Change Password Requester",
+        email: `req.mustchange.${Date.now()}@example.com`,
+        role: "REQUESTER",
+        active: true,
+        mustChangePassword: true,
+      },
+    });
+    createdUserIds.push(mustChangeUser.id);
+    const mustChangeSession = await getAuthSessionForUser(mustChangeUser.id);
+
+    const mustChangeRes = await request(app)
+      .get("/api/dashboard/requester")
+      .set("Cookie", mustChangeSession.cookie);
+    expect(mustChangeRes.status).toBe(403);
+    expect(mustChangeRes.body.error).toBe("PASSWORD_CHANGE_REQUIRED");
   });
 });
+
