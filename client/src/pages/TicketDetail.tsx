@@ -4,6 +4,7 @@ import { useRequester } from "../context/RequesterContext";
 import { fetchTicketDetail, TicketDetail as TicketDetailType, indicateAppearsResolved } from "../api";
 import Badge from "../components/Badge";
 import { AttachmentSection } from "../components/AttachmentSection";
+import ActionsTakenSection from "../components/ActionsTakenSection";
 import PublicCommentsSection from "../components/PublicCommentsSection";
 
 const ALLOWED_APPEARS_RESOLVED_STATUSES = [
@@ -250,6 +251,11 @@ export default function TicketDetail() {
             attachments={ticket.attachments || []}
             onAttachmentChanged={() => loadTicket(false)}
           />
+
+          {/* Actions Taken Section (Read-only for Requesters) */}
+          <div className="mt-4">
+            <ActionsTakenSection ticketId={ticket.id} ticketStatus={ticket.currentStatus} />
+          </div>
 
           {/* Public Comments Section */}
           <div className="mt-4">

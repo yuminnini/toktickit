@@ -86,11 +86,25 @@
   - Verified all 29 server test suites (197 tests) pass 100%.
 - **Human Review & Adjustment:** Confirmed strict requester data isolation, 8-status & 3-priority aggregations for IT Staff, and `userStats` extension exclusively for Administrators.
 
+### Prompt 7: Phase F4 — Zen Green Frontend Implementation (P08–P11)
+- **Date / Model:** 2026-10-29 | Gemini 4 Argon (Medium)
+- **Purpose:** Implement Phase F4 (Issue #54): Actions Taken UI (`ActionsTakenSection.tsx`), Ticket Workflow & Non-Color Status Cues (`Badge.tsx`, `StaffTicketDetailPage.tsx`), IT Staff & Admin Dashboard (`StaffDashboard.tsx`), Requester Dashboard (`RequesterDashboard.tsx`), drill-down query param support (`StaffQueuePage.tsx`, `MyTickets.tsx`), and client automated tests (T18, T20, T24, T25).
+- **Input Prompt:**
+  > "เพื่อนเราตรวจสอบและกด Approve / Merge PR #53 เรียบร้อยแล้วครับ"
+  > "สามารถเริ่มได้เลยครับผม"
+- **Relevant Output:**
+  - Created Issue #54 and feature branch `codex/lab4-p08-p11-frontend-dashboards` from `lab4-staging` (`9d89287`).
+  - Implemented `ActionsTakenSection.tsx` with chronological rendering, auto-populated performer, conditional `followUpNote` validation, Decision D4 author/Admin edit authorization, Decision D5 locked-ticket protection, and strict read-only view for Requesters.
+  - Enhanced `Badge.tsx` with distinct non-color icons (`data-testid="badge-icon"`) alongside explicit text labels across all 8 statuses and 3 priorities (AC-25 / T25).
+  - Implemented `StaffDashboard.tsx` (5 interactive metric cards with keyboard & click drill-down, Admin `userStats` overview, recent queue, quick actions) and `RequesterDashboard.tsx` (4 interactive metric cards, recent tickets, empty-state CTA, quick actions).
+  - Added 4 automated client test suites in `client/tests/lab-04/` (`ActionsTaken.test.tsx`, `TicketWorkflow.test.tsx`, `StaffDashboard.test.tsx`, `RequesterDashboard.test.tsx`).
+- **Human Review & Adjustment:** Verified 100% pass rate across all 19 client test suites (101 client tests) and 29 server test suites (197 server tests) = 298 total automated tests with zero regression.
+
 ---
 
 ## 3. My Reflection on Specification-Agent & Coding-Agent Use
 
-Working with an AI Specification Agent and Coding Agent across Phases F1–F3 demonstrated the power of Specification-Driven and Test-Driven Development:
+Working with an AI Specification Agent and Coding Agent across Phases F1–F4 demonstrated the power of Specification-Driven and Test-Driven Development:
 1. **Preventing Scope Creep:** The AI agent helped strictly demarcate what is in-scope (Actions Taken parent-child records, resolution gates, authoritative dashboards) versus what is explicitly excluded by the professor (SLA clocks, email notifications, BI warehouses).
-2. **Contract-First Rigor (Spec DD):** By locking down the REST API shapes, validation constraints (e.g. `followUpNote` mandatory only when `followUpRequired = true`), and the 8-state transition matrix early, we eliminated ambiguous design questions that could have caused costly rework during backend implementation.
-3. **Traceability & Regression Shield (Test DD):** By observing meaningful failing tests before implementing the Prisma model and routes, and verifying both new Lab 4 suites and previous Lab 1–3 suites pass 100% (197 server tests + 86 client tests = 283 total passing tests), we guaranteed zero regression and absolute compliance with engineering contracts.
+2. **Contract-First Rigor (Spec DD):** By locking down the REST API shapes, validation constraints (e.g. `followUpNote` mandatory only when `followUpRequired = true`), and the 8-state transition matrix early, we eliminated ambiguous design questions that could have caused costly rework during backend and frontend implementation.
+3. **Traceability & Regression Shield (Test DD):** By observing meaningful failing tests before implementing the Prisma model, backend routes, and React components, and verifying both new Lab 4 suites and previous Lab 1–3 suites pass 100% (197 server tests + 101 client tests = 298 total passing tests), we guaranteed zero regression and absolute compliance with engineering contracts.

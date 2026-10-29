@@ -153,7 +153,7 @@ flowchart TD
 ### 🟢 Phase F4: Zen Green Frontend Implementation (P08 – P11)
 *วัตถุประสงค์: พัฒนา UI ให้สวยงามตาม Zen Green Design, Responsive, Accessible และเชื่อมต่อ API สมบูรณ์*
 
-- [ ] **P08: Actions Taken UI on Ticket Detail**
+- [x] **P08: Actions Taken UI on Ticket Detail** (Completed)
   - แสดงรายการ Actions Taken ในหน้า Ticket Detail (ตารางหรือการ์ดที่เรียงตามเวลาอย่างเสถียร)
   - ฟอร์มสร้าง/แก้ไข Action Taken สำหรับ IT Staff:
     - Auto-display ผู้ดำเนินการจาก User Profile ปัจจุบัน
@@ -162,11 +162,11 @@ flowchart TD
     - Toggle `Follow-up Required?` (เมื่อเปิดจะบังคับให้กรอก Follow-up Note พร้อม validation message)
     - Attachment Notes input
   - มุมมองสำหรับ Requester: แสดงรายการ Actions Taken แบบ Read-only ชัดเจน
-- [ ] **P09: Ticket Workflow & Status Transition UI**
+- [x] **P09: Ticket Workflow & Status Transition UI** (Completed)
   - ปรับ UI ใน Ticket Detail ให้แสดงปุ่ม/ตัวเลือกเปลี่ยนสถานะเฉพาะที่ผู้ใช้นั้นมีสิทธิ์ทำได้
   - ป้ายสถานะ (Badges) และสีตาม Zen Green ให้ความแตกต่างที่มองเห็นชัดเจนโดยไม่พึ่งพาสีเพียงอย่างเดียว
   - จัดการ Error 409 Concurrency Conflict: แสดงแจ้งเตือนและมีปุ่ม Reload ข้อมูลล่าสุดโดยไม่ทำให้ข้อมูลที่กรอกค้างไว้สูญหาย
-- [ ] **P10: IT Staff & Admin Dashboard Screen**
+- [x] **P10: IT Staff & Admin Dashboard Screen** (Completed)
   - หน้า Dashboard สำหรับ IT Staff (`/dashboard`):
     - Welcome Banner & Header
     - Metric Cards: New, Open, In Progress, Waiting for Requester, My Assigned
@@ -175,7 +175,7 @@ flowchart TD
     - Section "My Recent Tickets" พร้อมปุ่ม View all
     - Quick Actions panel (Create Ticket, Search Tickets, My Queue -> `/staff/tickets?owner=mine`)
     - Responsive layout (Grid/Flexbox สลับแสดงผลตามขนาดหน้าจอ)
-- [ ] **P11: Requester Dashboard Screen**
+- [x] **P11: Requester Dashboard Screen** (Completed)
   - หน้า Dashboard สำหรับ Requester (`/dashboard`):
     - Welcome Banner
     - Metric Cards: My Open Tickets, In Progress, Resolved, Closed (คลิก Drill-down ไปหน้า My Tickets พร้อม filter status)

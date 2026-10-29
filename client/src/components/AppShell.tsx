@@ -107,6 +107,20 @@ export default function AppShell() {
                     <div className={`collapse navbar-collapse ${isMenuOpen ? "show" : ""}`}>
                         {!isForcedPasswordChange && (
                             <ul className="navbar-nav me-auto mb-2 mb-md-0">
+                                {(user || requester) && (
+                                    <li className="nav-item">
+                                        <NavLink
+                                            to="/dashboard"
+                                            className={({ isActive }) =>
+                                                `nav-link px-3 zen-nav-link ${isActive ? "active" : ""}`
+                                            }
+                                            onClick={() => setIsMenuOpen(false)}
+                                        >
+                                            Dashboard
+                                        </NavLink>
+                                    </li>
+                                )}
+
                                 {isRequesterRole && (
                                     <>
                                         <li className="nav-item">

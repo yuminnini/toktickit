@@ -15,6 +15,7 @@ import {
 } from "../api";
 import { useAuth } from "../context/AuthContext";
 import Badge from "../components/Badge";
+import ActionsTakenSection from "../components/ActionsTakenSection";
 import PublicCommentsSection from "../components/PublicCommentsSection";
 import InternalNotesSection from "../components/InternalNotesSection";
 import { formatBytes } from "../components/AttachmentPicker";
@@ -55,6 +56,7 @@ export default function StaffTicketDetailPage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [actionsCount, setActionsCount] = useState<number>(0);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -366,6 +368,13 @@ export default function StaffTicketDetailPage() {
             )}
           </div>
 
+          {/* Actions Taken Section */}
+          <ActionsTakenSection
+            ticketId={ticket.id}
+            ticketStatus={ticket.currentStatus}
+            onActionsChanged={(acts) => setActionsCount(acts.length)}
+          />
+
           {/* Public Comments Section */}
           <PublicCommentsSection ticketId={ticket.id} canComment={true} />
 
@@ -508,6 +517,14 @@ export default function StaffTicketDetailPage() {
               ) : (
                 <div className="small text-muted fst-italic">
                   No further transitions allowed from {ticket.currentStatus}.
+                </div>
+              )}
+              {pendingStatus === "RESOLVED" && actionsCount === 0 && (
+                <div
+                  className="alert alert-warning py-2 px-3 small mt-2 mb-0"
+                  data-testid="resolution-gate-notice"
+                >
+                  ⚠️ At least one <strong>Action Taken</strong> must be recorded before resolving this ticket.
                 </div>
               )}
             </div>
