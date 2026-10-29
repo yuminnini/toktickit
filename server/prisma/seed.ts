@@ -155,13 +155,15 @@ export async function seedDatabase(prisma: PrismaClient, initialPassword?: strin
     const sys = systems[(i - 1) % systems.length];
     const requesterId = (i % 3 === 0) ? sarahId : (i % 2 === 0) ? michaelId : jenniferId;
 
-    // Tickets in NEW or CANCELLED may be unassigned; others can be assigned to Alice or Bob
-    const ownerId = (status === "NEW" || i % 4 === 0) ? null : (i % 2 === 0 ? aliceId : bobId);
+    // Tickets in NEW or CANCELLED may be unassigned; OPEN, IN_PROGRESS, WAITING_FOR_REQUESTER, RESOLVED must have active owner (BR-10)
+    const ownerId = (status === "NEW" || (status === "CANCELLED" && i % 2 === 0))
+      ? null
+      : (i % 2 === 0 ? aliceId : bobId);
 
-    // Fix Point 1: update: {} ensures we do NOT overwrite existing tickets
+    // Fix Point 1 & Point 4: update ticketOwnerId if ownerId is assigned per BR-10
     const ticket = await prisma.ticket.upsert({
       where: { ticketNumber },
-      update: {},
+      update: ownerId !== null ? { ticketOwnerId: ownerId } : {},
       create: {
         ticketNumber,
         summary: `Fictional Ticket #${i}: System issue with ${sys.name}`,
@@ -205,13 +207,14 @@ export async function seedDatabase(prisma: PrismaClient, initialPassword?: strin
     // 5. Seed Actions Taken (Lab 4 / P03 / AC-26)
     // Satisfies: 0 actions (NEW/some OPEN), 1 action (WAITING/REOPENED), >1 actions (RESOLVED/CLOSED)
     let numActions = 0;
-    if (status === "RESOLVED" || status === "CLOSED") {
+    const currentTicketStatus = ticket.currentStatus;
+    if (currentTicketStatus === "RESOLVED" || currentTicketStatus === "CLOSED") {
       numActions = (i % 2 === 0) ? 2 : 3;
-    } else if (status === "IN_PROGRESS") {
+    } else if (currentTicketStatus === "IN_PROGRESS") {
       numActions = (i % 2 === 0) ? 2 : 1;
-    } else if (status === "WAITING_FOR_REQUESTER" || status === "REOPENED") {
+    } else if (currentTicketStatus === "WAITING_FOR_REQUESTER" || currentTicketStatus === "REOPENED") {
       numActions = 1;
-    } else if (status === "OPEN" && i % 2 === 0) {
+    } else if (currentTicketStatus === "OPEN" && i % 2 === 0) {
       numActions = 1;
     }
 

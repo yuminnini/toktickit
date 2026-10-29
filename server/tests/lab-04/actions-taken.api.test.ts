@@ -3,6 +3,7 @@ import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
 import { getAuthSessionForUser } from "../helpers/auth.js";
+import { hashSessionToken } from "../../src/services/session.js";
 
 describe("Phase F2 / P04: Actions Taken REST API & Authorization (T01–T09, T22)", () => {
   const allowedOrigin = process.env.APP_ORIGIN || "http://localhost:5173";
@@ -199,6 +200,7 @@ describe("Phase F2 / P04: Actions Taken REST API & Authorization (T01–T09, T22
       .set("Cookie", staffAlice.cookie)
       .set("X-CSRF-Token", staffAlice.csrfToken)
       .send({
+        performedById: 99999, // Spoofed performer ID must be ignored by backend
         description: "Checked network switch port and diagnostic logs.",
         result: "Port 4 replaced successfully.",
         followUpRequired: false,
@@ -212,6 +214,7 @@ describe("Phase F2 / P04: Actions Taken REST API & Authorization (T01–T09, T22
     expect(res.body.result).toBe("Port 4 replaced successfully.");
     expect(res.body.followUpRequired).toBe(false);
     expect(res.body.performedBy.id).toBe(staffAlice.id);
+    expect(res.body.performedBy.id).not.toBe(99999);
     expect(res.body.version).toBe(1);
     expect(res.body.actionDateTime).toBeDefined();
   });
@@ -445,11 +448,13 @@ describe("Phase F2 / P04: Actions Taken REST API & Authorization (T01–T09, T22
     expect(lockedPostRes.body.error).toBe("TICKET_LOCKED");
   });
 
-  // T08 / AC-08: Inactive staff user rejection
-  it("T08 / AC-08: Inactive staff session attempting action creation or patch is rejected with 403 Forbidden", async () => {
+  // T08 / AC-08: Inactive staff user rejection (POST, PATCH, GET)
+  it("T08 / AC-08: Inactive staff session attempting action creation, patch, or get is rejected", async () => {
     const ticket = await createTestTicket("OPEN");
+    const prisma = getPrisma();
 
-    const res = await request(app)
+    // 1. Inactive staff attempting POST /api/tickets/:id/actions is rejected
+    const postRes = await request(app)
       .post(`/api/tickets/${ticket.id}/actions`)
       .set("Origin", allowedOrigin)
       .set("Cookie", inactiveStaff.cookie)
@@ -460,8 +465,63 @@ describe("Phase F2 / P04: Actions Taken REST API & Authorization (T01–T09, T22
         followUpRequired: false,
       });
 
-    expect(res.status).toBe(403);
-    expect(res.body.error).toBe("FORBIDDEN");
+    expect([401, 403]).toContain(postRes.status);
+    if (postRes.status === 403) {
+      expect(postRes.body.error).toBe("FORBIDDEN");
+    } else {
+      expect(postRes.body.error).toBe("UNAUTHENTICATED");
+    }
+
+    // 2. Active staff creates an action to test PATCH
+    const existingAction = await prisma.actionTaken.create({
+      data: {
+        ticketId: ticket.id,
+        description: "Existing action by Alice",
+        result: "Existing result",
+        performedById: staffAlice.id,
+        followUpRequired: false,
+        version: 1,
+      },
+    });
+
+    // Inactive staff attempting PATCH /api/actions/:id is rejected
+    const patchRes = await request(app)
+      .patch(`/api/actions/${existingAction.id}`)
+      .set("Origin", allowedOrigin)
+      .set("Cookie", inactiveStaff.cookie)
+      .set("X-CSRF-Token", inactiveStaff.csrfToken)
+      .send({
+        description: "Unauthorized edit attempt",
+        expectedVersion: 1,
+      });
+
+    expect([401, 403]).toContain(patchRes.status);
+    if (patchRes.status === 403) {
+      expect(patchRes.body.error).toBe("FORBIDDEN");
+    } else {
+      expect(patchRes.body.error).toBe("UNAUTHENTICATED");
+    }
+
+    // 3. Inactive staff attempting GET /api/tickets/:id/actions is rejected
+    const getRes = await request(app)
+      .get(`/api/tickets/${ticket.id}/actions`)
+      .set("Cookie", inactiveStaff.cookie);
+
+    expect([401, 403]).toContain(getRes.status);
+    if (getRes.status === 403) {
+      expect(getRes.body.error).toBe("FORBIDDEN");
+    } else {
+      expect(getRes.body.error).toBe("UNAUTHENTICATED");
+    }
+
+    // AC-11: Session is revoked from database
+    const sessionToken = inactiveStaff.cookie.split("=")[1]?.split(";")[0];
+    if (sessionToken) {
+      const revokedSession = await prisma.session.findUnique({
+        where: { tokenHash: hashSessionToken(sessionToken) },
+      });
+      expect(revokedSession).toBeNull();
+    }
   });
 
   // T09 / AC-09: Chronological ordering of Actions Taken
@@ -535,5 +595,119 @@ describe("Phase F2 / P04: Actions Taken REST API & Authorization (T01–T09, T22
       .send({ expectedVersion: 1 });
     expect(patchRes.status).toBe(401);
     expect(patchRes.body.error).toBe("UNAUTHENTICATED");
+  });
+
+  // P1 Review Feedback: Input Validation Hardening
+  describe("P1 Input Validation Hardening on Actions Taken", () => {
+    it("rejects empty PATCH payload { expectedVersion: 1 } with 400 VALIDATION_ERROR", async () => {
+      const ticket = await createTestTicket("IN_PROGRESS");
+      const prisma = getPrisma();
+      const action = await prisma.actionTaken.create({
+        data: {
+          ticketId: ticket.id,
+          description: "Action for empty patch test",
+          result: "Result",
+          performedById: staffAlice.id,
+          followUpRequired: false,
+          version: 1,
+        },
+      });
+
+      const res = await request(app)
+        .patch(`/api/actions/${action.id}`)
+        .set("Origin", allowedOrigin)
+        .set("Cookie", staffAlice.cookie)
+        .set("X-CSRF-Token", staffAlice.csrfToken)
+        .send({ expectedVersion: 1 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("VALIDATION_ERROR");
+    });
+
+    it("rejects non-string or empty actionDateTime in PATCH with 400 VALIDATION_ERROR", async () => {
+      const ticket = await createTestTicket("IN_PROGRESS");
+      const prisma = getPrisma();
+      const action = await prisma.actionTaken.create({
+        data: {
+          ticketId: ticket.id,
+          description: "Action for actionDateTime patch test",
+          result: "Result",
+          performedById: staffAlice.id,
+          followUpRequired: false,
+          version: 1,
+        },
+      });
+
+      // Passing null as actionDateTime
+      const resNull = await request(app)
+        .patch(`/api/actions/${action.id}`)
+        .set("Origin", allowedOrigin)
+        .set("Cookie", staffAlice.cookie)
+        .set("X-CSRF-Token", staffAlice.csrfToken)
+        .send({ expectedVersion: 1, actionDateTime: null });
+
+      expect(resNull.status).toBe(400);
+      expect(resNull.body.error).toBe("VALIDATION_ERROR");
+
+      // Passing boolean/number
+      const resNum = await request(app)
+        .patch(`/api/actions/${action.id}`)
+        .set("Origin", allowedOrigin)
+        .set("Cookie", staffAlice.cookie)
+        .set("X-CSRF-Token", staffAlice.csrfToken)
+        .send({ expectedVersion: 1, actionDateTime: 0 });
+
+      expect(resNum.status).toBe(400);
+      expect(resNum.body.error).toBe("VALIDATION_ERROR");
+    });
+
+    it("rejects followUpNote exceeding 2000 characters in POST and PATCH with 400 VALIDATION_ERROR", async () => {
+      const ticket = await createTestTicket("IN_PROGRESS");
+      const longNote = "A".repeat(2001);
+
+      // POST with overly long followUpNote
+      const postRes = await request(app)
+        .post(`/api/tickets/${ticket.id}/actions`)
+        .set("Origin", allowedOrigin)
+        .set("Cookie", staffAlice.cookie)
+        .set("X-CSRF-Token", staffAlice.csrfToken)
+        .send({
+          description: "Checked components",
+          result: "Done",
+          followUpRequired: true,
+          followUpNote: longNote,
+        });
+
+      expect(postRes.status).toBe(400);
+      expect(postRes.body.error).toBe("VALIDATION_ERROR");
+
+      // Create valid action
+      const prisma = getPrisma();
+      const action = await prisma.actionTaken.create({
+        data: {
+          ticketId: ticket.id,
+          description: "Action for long note patch test",
+          result: "Result",
+          performedById: staffAlice.id,
+          followUpRequired: true,
+          followUpNote: "Valid follow up note",
+          version: 1,
+        },
+      });
+
+      // PATCH with overly long followUpNote
+      const patchRes = await request(app)
+        .patch(`/api/actions/${action.id}`)
+        .set("Origin", allowedOrigin)
+        .set("Cookie", staffAlice.cookie)
+        .set("X-CSRF-Token", staffAlice.csrfToken)
+        .send({
+          expectedVersion: 1,
+          followUpNote: longNote,
+        });
+
+      expect(patchRes.status).toBe(400);
+      expect(patchRes.body.error).toBe("VALIDATION_ERROR");
+    });
   });
 });

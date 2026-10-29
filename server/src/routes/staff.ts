@@ -815,6 +815,10 @@ staffRouter.patch("/tickets/:id/status", requireRole("IT_STAFF", "ADMINISTRATOR"
     const prisma = getPrisma();
 
     const result = await prisma.$transaction(async (tx) => {
+      if (typeof tx.$queryRaw === "function") {
+        await tx.$queryRaw`SELECT id FROM "Ticket" WHERE id = ${ticketId} FOR UPDATE`;
+      }
+
       const ticket = await tx.ticket.findUnique({
         where: { id: ticketId },
         include: {

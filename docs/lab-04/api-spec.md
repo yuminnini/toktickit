@@ -65,6 +65,7 @@ All error responses adhere to the standard JSON structure:
     "followUpRequired": true,
     "followUpNote": "Monitor ping latency over the next 24 hours.",
     "attachmentNotes": "See switch-diagnostic-log.txt in ticket attachments.",
+    "version": 1,
     "createdAt": "2026-10-12T09:45:12.000Z",
     "updatedAt": "2026-10-12T09:45:12.000Z"
   }

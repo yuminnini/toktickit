@@ -53,8 +53,8 @@ export async function authenticateSession(req: Request, res: Response, next: Nex
       return next();
     }
 
-    // Check session version
-    if (session.sessionVersion !== session.user.sessionVersion) {
+    // Check user active status and session version
+    if (!session.user.active || session.sessionVersion !== session.user.sessionVersion) {
       await revokeSessionByHash(tokenHash);
       return next();
     }
@@ -86,16 +86,10 @@ export async function authenticateSession(req: Request, res: Response, next: Nex
  * Ensures user has an active, authenticated session.
  */
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.user || !req.session) {
+  if (!req.user || !req.session || !req.user.active) {
     return res.status(401).json({
       error: "UNAUTHENTICATED",
       message: "Authentication required",
-    });
-  }
-  if (!req.user.active && req.user.role === "REQUESTER") {
-    return res.status(401).json({
-      error: "UNAUTHENTICATED",
-      message: "Account is inactive",
     });
   }
   return next();
