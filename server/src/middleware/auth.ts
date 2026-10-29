@@ -53,10 +53,17 @@ export async function authenticateSession(req: Request, res: Response, next: Nex
       return next();
     }
 
-    // Check user active status and session version
-    if (!session.user.active || session.sessionVersion !== session.user.sessionVersion) {
+    // Check session version mismatch (e.g., password change or explicit global logout)
+    if (session.sessionVersion !== session.user.sessionVersion) {
       await revokeSessionByHash(tokenHash);
       return next();
+    }
+
+    // If user is inactive, immediately revoke session in DB per Lab 3 AC-11,
+    // but still attach req.user (with active: false) and req.session for this request
+    // so protected staff/action endpoints can return 403 FORBIDDEN per Lab 4 AC-08 / T08.
+    if (!session.user.active) {
+      await revokeSessionByHash(tokenHash);
     }
 
     req.user = {
@@ -86,10 +93,22 @@ export async function authenticateSession(req: Request, res: Response, next: Nex
  * Ensures user has an active, authenticated session.
  */
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.user || !req.session || !req.user.active) {
+  if (!req.user || !req.session) {
     return res.status(401).json({
       error: "UNAUTHENTICATED",
       message: "Authentication required",
+    });
+  }
+  if (!req.user.active) {
+    if (req.baseUrl.startsWith("/api/auth") || req.user.role === "REQUESTER") {
+      return res.status(401).json({
+        error: "UNAUTHENTICATED",
+        message: "Authentication required",
+      });
+    }
+    return res.status(403).json({
+      error: "FORBIDDEN",
+      message: "Account is inactive",
     });
   }
   return next();

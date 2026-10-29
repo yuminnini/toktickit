@@ -411,8 +411,25 @@ actionsRouter.patch("/actions/:id", requireAuth, requirePasswordChanged, async (
         if (followUpNote !== undefined) {
           updateData.followUpNote = followUpNote.trim();
         }
-      } else if (followUpRequired !== undefined && !followUpRequired) {
-        updateData.followUpNote = null;
+      } else {
+        if (followUpNote !== undefined) {
+          if (followUpNote === null || (typeof followUpNote === "string" && followUpNote.trim().length === 0)) {
+            updateData.followUpNote = null;
+          } else {
+            return {
+              status: 400,
+              data: {
+                error: "VALIDATION_ERROR",
+                message: "One or more fields failed validation",
+                fields: {
+                  followUpNote: "followUpNote cannot be provided when followUpRequired is false",
+                },
+              },
+            };
+          }
+        } else if (followUpRequired !== undefined) {
+          updateData.followUpNote = null;
+        }
       }
 
       if (Object.keys(updateData).length === 0) {

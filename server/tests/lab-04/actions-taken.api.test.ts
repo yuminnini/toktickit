@@ -449,11 +449,11 @@ describe("Phase F2 / P04: Actions Taken REST API & Authorization (T01–T09, T22
   });
 
   // T08 / AC-08: Inactive staff user rejection (POST, PATCH, GET)
-  it("T08 / AC-08: Inactive staff session attempting action creation, patch, or get is rejected", async () => {
+  it("T08 / AC-08: Inactive staff session attempting action creation, patch, or get is rejected with 403 and session revoked", async () => {
     const ticket = await createTestTicket("OPEN");
     const prisma = getPrisma();
 
-    // 1. Inactive staff attempting POST /api/tickets/:id/actions is rejected
+    // 1. Inactive staff attempting POST /api/tickets/:id/actions is rejected with 403 FORBIDDEN
     const postRes = await request(app)
       .post(`/api/tickets/${ticket.id}/actions`)
       .set("Origin", allowedOrigin)
@@ -465,14 +465,33 @@ describe("Phase F2 / P04: Actions Taken REST API & Authorization (T01–T09, T22
         followUpRequired: false,
       });
 
-    expect([401, 403]).toContain(postRes.status);
-    if (postRes.status === 403) {
-      expect(postRes.body.error).toBe("FORBIDDEN");
-    } else {
-      expect(postRes.body.error).toBe("UNAUTHENTICATED");
+    expect(postRes.status).toBe(403);
+    expect(postRes.body.error).toBe("FORBIDDEN");
+
+    // Verify session was immediately revoked in the DB (AC-11)
+    const sessionToken1 = inactiveStaff.cookie.split("=")[1]?.split(";")[0];
+    if (sessionToken1) {
+      const revokedSession = await prisma.session.findUnique({
+        where: { tokenHash: hashSessionToken(sessionToken1) },
+      });
+      expect(revokedSession).toBeNull();
     }
 
-    // 2. Active staff creates an action to test PATCH
+    // Subsequent reuse of the same revoked cookie returns 401 UNAUTHENTICATED
+    const postReuseRes = await request(app)
+      .post(`/api/tickets/${ticket.id}/actions`)
+      .set("Origin", allowedOrigin)
+      .set("Cookie", inactiveStaff.cookie)
+      .set("X-CSRF-Token", inactiveStaff.csrfToken)
+      .send({
+        description: "Action by inactive staff reuse",
+        result: "Denied",
+        followUpRequired: false,
+      });
+    expect(postReuseRes.status).toBe(401);
+    expect(postReuseRes.body.error).toBe("UNAUTHENTICATED");
+
+    // 2. Active staff creates an action to test PATCH with a fresh inactive staff session
     const existingAction = await prisma.actionTaken.create({
       data: {
         ticketId: ticket.id,
@@ -484,43 +503,43 @@ describe("Phase F2 / P04: Actions Taken REST API & Authorization (T01–T09, T22
       },
     });
 
-    // Inactive staff attempting PATCH /api/actions/:id is rejected
+    const danaSession2 = await getAuthSessionForUser(inactiveStaff.id);
     const patchRes = await request(app)
       .patch(`/api/actions/${existingAction.id}`)
       .set("Origin", allowedOrigin)
-      .set("Cookie", inactiveStaff.cookie)
-      .set("X-CSRF-Token", inactiveStaff.csrfToken)
+      .set("Cookie", danaSession2.cookie)
+      .set("X-CSRF-Token", danaSession2.csrfToken)
       .send({
         description: "Unauthorized edit attempt",
         expectedVersion: 1,
       });
 
-    expect([401, 403]).toContain(patchRes.status);
-    if (patchRes.status === 403) {
-      expect(patchRes.body.error).toBe("FORBIDDEN");
-    } else {
-      expect(patchRes.body.error).toBe("UNAUTHENTICATED");
+    expect(patchRes.status).toBe(403);
+    expect(patchRes.body.error).toBe("FORBIDDEN");
+
+    const sessionToken2 = danaSession2.cookie.split("=")[1]?.split(";")[0];
+    if (sessionToken2) {
+      const revokedSession2 = await prisma.session.findUnique({
+        where: { tokenHash: hashSessionToken(sessionToken2) },
+      });
+      expect(revokedSession2).toBeNull();
     }
 
-    // 3. Inactive staff attempting GET /api/tickets/:id/actions is rejected
+    // 3. Inactive staff attempting GET /api/tickets/:id/actions is rejected with 403 FORBIDDEN
+    const danaSession3 = await getAuthSessionForUser(inactiveStaff.id);
     const getRes = await request(app)
       .get(`/api/tickets/${ticket.id}/actions`)
-      .set("Cookie", inactiveStaff.cookie);
+      .set("Cookie", danaSession3.cookie);
 
-    expect([401, 403]).toContain(getRes.status);
-    if (getRes.status === 403) {
-      expect(getRes.body.error).toBe("FORBIDDEN");
-    } else {
-      expect(getRes.body.error).toBe("UNAUTHENTICATED");
-    }
+    expect(getRes.status).toBe(403);
+    expect(getRes.body.error).toBe("FORBIDDEN");
 
-    // AC-11: Session is revoked from database
-    const sessionToken = inactiveStaff.cookie.split("=")[1]?.split(";")[0];
-    if (sessionToken) {
-      const revokedSession = await prisma.session.findUnique({
-        where: { tokenHash: hashSessionToken(sessionToken) },
+    const sessionToken3 = danaSession3.cookie.split("=")[1]?.split(";")[0];
+    if (sessionToken3) {
+      const revokedSession3 = await prisma.session.findUnique({
+        where: { tokenHash: hashSessionToken(sessionToken3) },
       });
-      expect(revokedSession).toBeNull();
+      expect(revokedSession3).toBeNull();
     }
   });
 
@@ -708,6 +727,51 @@ describe("Phase F2 / P04: Actions Taken REST API & Authorization (T01–T09, T22
 
       expect(patchRes.status).toBe(400);
       expect(patchRes.body.error).toBe("VALIDATION_ERROR");
+    });
+
+    it("handles PATCH { followUpNote: null, expectedVersion: 1 } when followUpRequired is already false", async () => {
+      const ticket = await createTestTicket("IN_PROGRESS");
+      const prisma = getPrisma();
+      const action = await prisma.actionTaken.create({
+        data: {
+          ticketId: ticket.id,
+          description: "Action with followUpRequired false",
+          result: "Result",
+          performedById: staffAlice.id,
+          followUpRequired: false,
+          followUpNote: null,
+          version: 1,
+        },
+      });
+
+      // Sending { followUpNote: null, expectedVersion: 1 } should succeed with 200 and increment version
+      const resNull = await request(app)
+        .patch(`/api/actions/${action.id}`)
+        .set("Origin", allowedOrigin)
+        .set("Cookie", staffAlice.cookie)
+        .set("X-CSRF-Token", staffAlice.csrfToken)
+        .send({
+          expectedVersion: 1,
+          followUpNote: null,
+        });
+
+      expect(resNull.status).toBe(200);
+      expect(resNull.body.followUpNote).toBeNull();
+      expect(resNull.body.version).toBe(2);
+
+      // Sending non-empty followUpNote when effectiveFollowUpRequired is false should return 400 VALIDATION_ERROR
+      const resNonEmpty = await request(app)
+        .patch(`/api/actions/${action.id}`)
+        .set("Origin", allowedOrigin)
+        .set("Cookie", staffAlice.cookie)
+        .set("X-CSRF-Token", staffAlice.csrfToken)
+        .send({
+          expectedVersion: 2,
+          followUpNote: "Unexpected note when followUpRequired is false",
+        });
+
+      expect(resNonEmpty.status).toBe(400);
+      expect(resNonEmpty.body.error).toBe("VALIDATION_ERROR");
     });
   });
 });
