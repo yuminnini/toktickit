@@ -100,11 +100,25 @@
   - Added 4 automated client test suites in `client/tests/lab-04/` (`ActionsTaken.test.tsx`, `TicketWorkflow.test.tsx`, `StaffDashboard.test.tsx`, `RequesterDashboard.test.tsx`).
 - **Human Review & Adjustment:** Verified 100% pass rate across all 19 client test suites (102 client tests) and 29 server test suites (197 server tests) = 299 total automated tests with zero regression.
 
+### Prompt 8: Phase F5 — E2E Hardening, Responsive Screenshots & Release Verification (P12–P14)
+- **Date / Model:** 2026-10-30 | Gemini 4 Argon (Medium)
+- **Purpose:** Execute Phase F5 (Issue #56): Playwright E2E test suites (`e2e/lab-04/`), responsive viewport verification & screenshot capture (`artifacts/lab-04/screenshots/`), and final documentation alignment.
+- **Input Prompt:**
+  > "ตอนนี้เพื่อนเราapprove และกดmerge F4เรียบร้อยแล้ว ทีนี้ขั้นตอนต่อไปคืออะไรครับ"
+  > "เริ่มทำF5ได้เลย"
+- **Relevant Output:**
+  - Fast-forwarded `lab4-staging` (`800b643`), created Issue #56, and branched `codex/lab4-p12-p14-hardening-release`.
+  - Authored 4 Playwright E2E suites in `e2e/lab-04/` (`actions-taken-flow.spec.ts`, `ticket-resolution.spec.ts`, `dashboards.spec.ts`, `responsive.spec.ts`).
+  - Caught and fixed an E2E contract nuance in `client/src/api.ts` where `GET /api/tickets/:id/actions` returns a top-level JSON array and `POST`/`PATCH` return the `ActionTaken` object directly.
+  - Updated `e2e/lab-03/staff-ticket-flow.spec.ts` to seed a prerequisite `ActionTaken` before resolving a ticket per Decision D2 (AC-27 / T27).
+  - Captured 15 high-resolution PNG screenshots across `desktop` (`1280x800`), `tablet` (`768x1024`), and `mobile` (`375x667`) viewports under `artifacts/lab-04/screenshots/staff-dashboard/`, `requester-dashboard/`, and `actions-taken/`.
+- **Human Review & Adjustment:** Verified all 14 Lab 4 E2E tests, Lab 3 regression E2E tests, 197 server tests, and 102 client tests pass 100% (313+ total automated tests).
+
 ---
 
 ## 3. My Reflection on Specification-Agent & Coding-Agent Use
 
-Working with an AI Specification Agent and Coding Agent across Phases F1–F4 demonstrated the power of Specification-Driven and Test-Driven Development:
+Working with an AI Specification Agent and Coding Agent across Phases F1–F5 demonstrated the power of Specification-Driven and Test-Driven Development:
 1. **Preventing Scope Creep:** The AI agent helped strictly demarcate what is in-scope (Actions Taken parent-child records, resolution gates, authoritative dashboards) versus what is explicitly excluded by the professor (SLA clocks, email notifications, BI warehouses).
 2. **Contract-First Rigor (Spec DD):** By locking down the REST API shapes, validation constraints (e.g. `followUpNote` mandatory only when `followUpRequired = true`), and the 8-state transition matrix early, we eliminated ambiguous design questions that could have caused costly rework during backend and frontend implementation.
-3. **Traceability & Regression Shield (Test DD):** By observing meaningful failing tests before implementing the Prisma model, backend routes, and React components, and verifying both new Lab 4 suites and previous Lab 1–3 suites pass 100% (197 server tests + 102 client tests = 299 total passing tests), we guaranteed zero regression and absolute compliance with engineering contracts.
+3. **Traceability & Regression Shield (Test DD):** By observing meaningful failing tests before implementing the Prisma model, backend routes, React components, and Playwright E2E flows, and verifying both new Lab 4 suites and previous Lab 1–3 suites pass 100% (197 server tests + 102 client tests + 14 Lab 4 E2E tests = 313 total passing tests), we guaranteed zero regression and absolute compliance with engineering contracts.

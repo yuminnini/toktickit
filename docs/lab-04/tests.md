@@ -1,8 +1,8 @@
 # TokTickIT — Lab 4 Test DD / TDD Plan & Traceability Matrix
 
-- **Version:** 1.0-draft
-- **Date:** 2026-10-12
-- **Status:** Planned (Spec DD / Test DD Stage)
+- **Version:** 1.0-final
+- **Date:** 2026-10-30
+- **Status:** Completed & Verified (100% Pass Across Server, Client & E2E)
 - **Baseline Commit:** `1f2e3abe7b3ac0f6784f281c9fb7e808def488ce`
 
 ---
@@ -43,12 +43,12 @@ The test plan implements strict **Specification-Driven Development (Spec DD)** a
 | **T20** | AC-20 | F4/P10 | UI | IT Staff Dashboard drill-down navigation | Clicking "My Assigned" card navigates to queue pre-filtered by `owner=mine`. | `client/tests/lab-04/StaffDashboard.test.tsx` | Passed |
 | **T21** | AC-21 | F3/P07 | API | Administrator Dashboard user statistics | Admin request to dashboard returns staff metrics plus `userStats` (total, active, inactive). | `server/tests/lab-04/staff-dashboard.api.test.ts` | Passed |
 | **T22** | AC-22 | F2/P04, F3/P06–P07 | API/Sec | Unauthenticated dashboard and actions access | Unauthenticated requests receive HTTP 401 Unauthorized across all endpoints. | `server/tests/lab-04/actions-taken.api.test.ts`, `requester-dashboard.api.test.ts`, `staff-dashboard.api.test.ts` | Passed |
-| **T23** | AC-23 | F5/P13 | E2E/Resp | Responsive UI across viewports | Renders without horizontal scroll or clipping at 1280px, 768px, and 375px. | `e2e/lab-04/responsive.spec.ts` | Planned |
+| **T23** | AC-23 | F5/P13 | E2E/Resp | Responsive UI across viewports | Renders without horizontal scroll or clipping at 1280px, 768px, and 375px. | `e2e/lab-04/responsive.spec.ts` | Passed |
 | **T24** | AC-24 | F4/P08 | UI/A11y | Keyboard accessibility & visible focus | All interactive cards, buttons, and inputs navigable via keyboard with visible focus ring. | `client/tests/lab-04/ActionsTaken.test.tsx` | Passed |
 | **T25** | AC-25 | F4/P09 | UI/A11y | Non-color status indicators | Status badges and cards include distinct text labels and icons, not color alone. | `client/tests/lab-04/TicketWorkflow.test.tsx` | Passed |
 | **T26** | AC-26 | F2/P03 | Int/Seed | Idempotent seed data verification | Repeated `db:seed` execution succeeds safely; generates 0, 1, and multi-action tickets. | `server/tests/lab-04/seed.integration.test.ts` | Passed |
-| **T27** | AC-27 | F5/P12 | Regr | Labs 1–3 full regression suite with D2/D6 alignment | Previous test suites pass 100%; tests resolving tickets in `staff-ticket-detail.api.test.ts` adapted in F2 to supply prerequisite Action Taken per D2/D6. | Full test runner (`npm test`) | Planned |
-| **T28** | AC-28 | F5/P12 | E2E | End-to-end complete workflow | Playwright E2E executes full lifecycle: create ticket -> dashboard -> actions -> resolve. | `e2e/lab-04/actions-taken-flow.spec.ts` | Planned |
+| **T27** | AC-27 | F5/P12 | Regr | Labs 1–3 full regression suite with D2/D6 alignment | Previous test suites pass 100%; tests resolving tickets in `staff-ticket-detail.api.test.ts` and `staff-ticket-flow.spec.ts` adapted to supply prerequisite Action Taken per D2/D6. | Full test runner (`npm test` & `npx playwright test`) | Passed |
+| **T28** | AC-28 | F5/P12 | E2E | End-to-end complete workflow | Playwright E2E executes full lifecycle: create ticket -> dashboard -> actions -> resolve. | `e2e/lab-04/actions-taken-flow.spec.ts`, `ticket-resolution.spec.ts`, `dashboards.spec.ts` | Passed |
 
 ---
 

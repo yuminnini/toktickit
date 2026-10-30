@@ -1091,7 +1091,7 @@ export async function fetchTicketActions(ticketId: number): Promise<ActionTakenI
   const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions`, {
     credentials: "include",
   });
-  const resData = await res.json().catch(() => ({}));
+  const resData = await res.json().catch(() => []);
   if (!res.ok) {
     const error = new Error(resData.message || "Failed to fetch actions taken") as Error & {
       code?: string;
@@ -1101,7 +1101,7 @@ export async function fetchTicketActions(ticketId: number): Promise<ActionTakenI
     error.status = res.status;
     throw error;
   }
-  return resData.actions || [];
+  return Array.isArray(resData) ? resData : resData.actions || [];
 }
 
 export async function createTicketAction(
@@ -1130,7 +1130,7 @@ export async function createTicketAction(
     error.fields = resData.fields;
     throw error;
   }
-  return resData.action;
+  return resData.action || resData;
 }
 
 export async function updateTicketAction(
@@ -1159,7 +1159,7 @@ export async function updateTicketAction(
     error.fields = resData.fields;
     throw error;
   }
-  return resData.action;
+  return resData.action || resData;
 }
 
 export async function fetchRequesterDashboard(
