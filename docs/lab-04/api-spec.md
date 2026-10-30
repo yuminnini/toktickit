@@ -1,8 +1,8 @@
 # TokTickIT — Lab 4 REST API Specification
 
-- **Version:** 1.0-draft
-- **Date:** 2026-10-12
-- **Status:** Planned (Spec DD Stage)
+- **Version:** 1.0-final
+- **Date:** 2026-10-30
+- **Status:** Implemented & Verified
 - **Base URL:** `/api`
 - **Format:** JSON (`application/json`), ISO-8601 UTC dates, camelCase fields
 

@@ -189,7 +189,7 @@ flowchart TD
 ### 🟢 Phase F5: Hardening, Full Regression, Verification & Submission (P12 – P14)
 *วัตถุประสงค์: ตรวจสอบคุณภาพขั้นสูงสุด รวบรวมหลักฐาน และจัดทำรายงานส่ง 60 คะแนน*
 
-- [ ] **P12: Comprehensive Automated Testing & Traceability**
+- [x] **P12: Comprehensive Automated Testing & Traceability** (Completed)
   - **Server API Tests (`server/tests/lab-04/`):**
     - `actions-taken.api.test.ts`
     - `ticket-workflow.api.test.ts`
@@ -204,15 +204,16 @@ flowchart TD
     - `actions-taken-flow.spec.ts`
     - `ticket-resolution.spec.ts`
     - `dashboards.spec.ts`
+    - `responsive.spec.ts`
   - **Regression Testing:** รัน Test Suites ทั้งหมดของ Lab 1, Lab 2, Lab 3 เพื่อยืนยันว่าไม่มีจุดใดพัง
-- [ ] **P13: Accessibility, Responsive Verification & Screenshots Capture**
+- [x] **P13: Accessibility, Responsive Verification & Screenshots Capture** (Completed)
   - ทดสอบและแคปภาพหน้าจอที่ความกว้าง 375px (Mobile), 768px (Tablet), 1280px (Desktop)
   - เก็บ Screenshots ลงใน `artifacts/lab-04/screenshots/`:
     - `staff-dashboard/`
     - `requester-dashboard/`
     - `actions-taken/`
   - ตรวจสอบ Keyboard focus, Tab order, Screen reader attributes (ARIA), ไม่มี Text overlapping หรือ Overflow
-- [ ] **P14: Git Workflow, Review & Final PDF Submission**
+- [x] **P14: Git Workflow, Review & Final PDF Submission** (Completed)
   - จัดทำ `docs/lab-04/reviewer.md` บันทึก PR links, Peer Reviewer Identity, Feedback และ Approval
   - จัดทำ `docs/lab-04/ai-use.md` บันทึก LLM Prompt 6-10 ตัวอย่าง และข้อคิดเห็น Reflection
   - Merge feature branches สู่ `lab4-staging` แล้ว merge สู่ `main`
