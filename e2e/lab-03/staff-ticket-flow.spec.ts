@@ -15,7 +15,7 @@ test.describe("IT Staff Ticket Flow E2E (T39 / AC-39)", () => {
     const testHash = await hashPassword("InitialPass123!");
 
     // Ensure staff Alice exists and has mustChangePassword: false
-    await prisma.user.upsert({
+    const aliceUser = await prisma.user.upsert({
       where: { email: "staff.alice@example.com" },
       update: {
         active: true,
@@ -71,11 +71,25 @@ test.describe("IT Staff Ticket Flow E2E (T39 / AC-39)", () => {
       },
     });
     ticketId = createdTicket.id;
+
+    // Lab 4 Decision D2 (AC-27 / T27): Resolving a ticket requires >= 1 Action Taken
+    await prisma.actionTaken.create({
+      data: {
+        ticketId: createdTicket.id,
+        performedById: aliceUser.id,
+        actionDateTime: new Date(Date.now() - 60000),
+        description: "Prerequisite diagnostic action for E2E resolution flow.",
+        result: "Root cause identified and verified.",
+        followUpRequired: false,
+        version: 1,
+      },
+    });
   });
 
   test.afterAll(async () => {
     const prisma = getPrisma();
     try {
+      await prisma.actionTaken.deleteMany({ where: { ticketId } });
       await prisma.publicComment.deleteMany({ where: { ticketId } });
       await prisma.internalNote.deleteMany({ where: { ticketId } });
       await prisma.ticket.delete({ where: { id: ticketId } });

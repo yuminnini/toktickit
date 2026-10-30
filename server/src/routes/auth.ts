@@ -124,7 +124,7 @@ authRouter.post("/login", async (req: Request, res: Response) => {
  */
 authRouter.get("/me", (req: Request, res: Response) => {
   res.setHeader("Cache-Control", "no-store");
-  if (!req.user) {
+  if (!req.user || !req.user.active) {
     return res.status(401).json({
       error: "UNAUTHENTICATED",
       message: "No active session",
@@ -141,7 +141,7 @@ authRouter.get("/me", (req: Request, res: Response) => {
  */
 authRouter.get("/csrf", (req: Request, res: Response) => {
   res.setHeader("Cache-Control", "no-store");
-  if (!req.session) {
+  if (!req.session || !req.user?.active) {
     return res.status(401).json({
       error: "UNAUTHENTICATED",
       message: "Active session required to obtain CSRF token",

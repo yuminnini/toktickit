@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useRequester } from "../context/RequesterContext";
 import {
   fetchTickets,
@@ -16,6 +16,7 @@ import Pagination from "../components/Pagination";
 export default function MyTickets() {
   const { requester } = useRequester();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryError, setCategoryError] = useState<string | null>(null);
@@ -23,17 +24,20 @@ export default function MyTickets() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filter and pagination state
+  // Filter and pagination state (initialized from URL query params for Dashboard drill-down)
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [selectedPriority, setSelectedPriority] = useState<PriorityType | "">("");
-  const [selectedStatus, setSelectedStatus] = useState<TicketStatusType | "">("");
+  const [selectedStatus, setSelectedStatus] = useState<TicketStatusType | "">(
+    () => (searchParams.get("status") as TicketStatusType) || ""
+  );
   const [sortField, setSortField] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const prevRequesterIdRef = useRef<number | undefined>(requester?.id);
 
   // Load categories with error handling and retry
   const loadCategories = useCallback(() => {
@@ -54,12 +58,15 @@ export default function MyTickets() {
 
   // Reset when requester changes (Peer review #4)
   useEffect(() => {
-    setTicketsData(null);
-    setPage(1);
-    setSearch("");
-    setSelectedCategory("");
-    setSelectedPriority("");
-    setSelectedStatus("");
+    if (prevRequesterIdRef.current !== undefined && prevRequesterIdRef.current !== requester?.id) {
+      setTicketsData(null);
+      setPage(1);
+      setSearch("");
+      setSelectedCategory("");
+      setSelectedPriority("");
+      setSelectedStatus("");
+    }
+    prevRequesterIdRef.current = requester?.id;
   }, [requester?.id]);
 
   // Load tickets function
@@ -279,8 +286,11 @@ export default function MyTickets() {
               <option value="NEW">New</option>
               <option value="OPEN">Open</option>
               <option value="IN_PROGRESS">In Progress</option>
+              <option value="WAITING_FOR_REQUESTER">Waiting for Requester</option>
+              <option value="REOPENED">Reopened</option>
               <option value="RESOLVED">Resolved</option>
               <option value="CLOSED">Closed</option>
+              <option value="CANCELLED">Cancelled</option>
             </select>
           </div>
 

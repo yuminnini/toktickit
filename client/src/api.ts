@@ -983,4 +983,223 @@ export async function resetUserPasswordAdmin(
   }
   return resData;
 }
+
+// ----------------------------------------------------
+// Lab 4: Actions Taken & Role-Tailored Dashboards
+// ----------------------------------------------------
+
+export interface ActionTakenItem {
+  id: number;
+  ticketId: number;
+  performedBy: {
+    id: number;
+    name: string;
+    email?: string;
+    role: RoleType;
+  };
+  actionDateTime: string;
+  description: string;
+  result: string;
+  followUpRequired: boolean;
+  followUpNote: string | null;
+  attachmentNotes: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateActionTakenInput {
+  actionDateTime?: string;
+  description: string;
+  result: string;
+  followUpRequired?: boolean;
+  followUpNote?: string | null;
+  attachmentNotes?: string | null;
+}
+
+export interface UpdateActionTakenInput {
+  actionDateTime?: string;
+  description?: string;
+  result?: string;
+  followUpRequired?: boolean;
+  followUpNote?: string | null;
+  attachmentNotes?: string | null;
+  expectedVersion: number;
+}
+
+export interface RequesterDashboardRecentTicket {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  currentStatus: TicketStatusType;
+  requestedPriority: PriorityType;
+  itPriority: PriorityType;
+  updatedAt: string;
+  category: { id: number; name: string };
+}
+
+export interface RequesterDashboardResponse {
+  myOpenTickets: number;
+  inProgress: number;
+  resolved: number;
+  closed: number;
+  waitingForRequester: number;
+  recentlyUpdated: RequesterDashboardRecentTicket[];
+}
+
+export interface StaffDashboardRecentQueueItem {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  currentStatus: TicketStatusType;
+  requestedPriority: PriorityType;
+  itPriority: PriorityType;
+  ticketOwner: { id: number; name: string } | null;
+  updatedAt: string;
+}
+
+export interface StaffDashboardResponse {
+  new: number;
+  open: number;
+  inProgress: number;
+  waitingForRequester: number;
+  myAssigned: number;
+  byStatus: {
+    NEW: number;
+    OPEN: number;
+    IN_PROGRESS: number;
+    WAITING_FOR_REQUESTER: number;
+    RESOLVED: number;
+    CLOSED: number;
+    REOPENED: number;
+    CANCELLED: number;
+  };
+  byPriority: {
+    HIGH: number;
+    MEDIUM: number;
+    LOW: number;
+  };
+  recentQueue: StaffDashboardRecentQueueItem[];
+  userStats?: {
+    totalUsers: number;
+    activeStaff: number;
+    inactiveUsers: number;
+  };
+}
+
+export async function fetchTicketActions(ticketId: number): Promise<ActionTakenItem[]> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions`, {
+    credentials: "include",
+  });
+  const resData = await res.json().catch(() => []);
+  if (!res.ok) {
+    const error = new Error(resData.message || "Failed to fetch actions taken") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = resData.error;
+    error.status = res.status;
+    throw error;
+  }
+  return Array.isArray(resData) ? resData : resData.actions || [];
+}
+
+export async function createTicketAction(
+  ticketId: number,
+  data: CreateActionTakenInput
+): Promise<ActionTakenItem> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify(data),
+  });
+  const resData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(resData.message || "Failed to create action taken") as Error & {
+      code?: string;
+      status?: number;
+      fields?: Record<string, string[]>;
+    };
+    error.code = resData.error;
+    error.status = res.status;
+    error.fields = resData.fields;
+    throw error;
+  }
+  return resData.action || resData;
+}
+
+export async function updateTicketAction(
+  actionId: number,
+  data: UpdateActionTakenInput
+): Promise<ActionTakenItem> {
+  const csrf = await getOrFetchCsrf();
+  const res = await fetch(`${API_URL}/api/actions/${actionId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify(data),
+  });
+  const resData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(resData.message || "Failed to update action taken") as Error & {
+      code?: string;
+      status?: number;
+      fields?: Record<string, string[]>;
+    };
+    error.code = resData.error;
+    error.status = res.status;
+    error.fields = resData.fields;
+    throw error;
+  }
+  return resData.action || resData;
+}
+
+export async function fetchRequesterDashboard(
+  signal?: AbortSignal
+): Promise<RequesterDashboardResponse> {
+  const res = await fetch(`${API_URL}/api/dashboard/requester`, {
+    signal,
+    credentials: "include",
+  });
+  const resData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(resData.message || "Failed to fetch requester dashboard") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = resData.error;
+    error.status = res.status;
+    throw error;
+  }
+  return resData;
+}
+
+export async function fetchStaffDashboard(
+  signal?: AbortSignal
+): Promise<StaffDashboardResponse> {
+  const res = await fetch(`${API_URL}/api/dashboard/staff`, {
+    signal,
+    credentials: "include",
+  });
+  const resData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(resData.message || "Failed to fetch staff dashboard") as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = resData.error;
+    error.status = res.status;
+    throw error;
+  }
+  return resData;
+}
+
 

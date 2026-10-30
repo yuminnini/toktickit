@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   fetchStaffTickets,
   fetchCategories,
@@ -15,19 +15,24 @@ import Pagination from "../components/Pagination";
 export default function StaffQueuePage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [queueData, setQueueData] = useState<StaffQueueResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Search & Filter state
+  // Search & Filter state (initialized from URL query params for Dashboard drill-down)
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [selectedReqPriority, setSelectedReqPriority] = useState<PriorityType | "">("");
   const [selectedItPriority, setSelectedItPriority] = useState<PriorityType | "">("");
-  const [selectedStatus, setSelectedStatus] = useState<TicketStatusType | "">("");
-  const [ownerFilter, setOwnerFilter] = useState<"all" | "unassigned" | "mine">("all");
+  const [selectedStatus, setSelectedStatus] = useState<TicketStatusType | "">(
+    () => (searchParams.get("status") as TicketStatusType) || ""
+  );
+  const [ownerFilter, setOwnerFilter] = useState<"all" | "unassigned" | "mine">(
+    () => (searchParams.get("owner") as "all" | "unassigned" | "mine") || "all"
+  );
 
   // Sorting & Pagination state
   const [sortField, setSortField] = useState<

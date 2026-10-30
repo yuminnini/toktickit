@@ -10,6 +10,7 @@ import TicketDetail from "./pages/TicketDetail";
 import StaffQueuePage from "./pages/StaffQueuePage";
 import StaffTicketDetailPage from "./pages/StaffTicketDetailPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
+import DashboardPage from "./pages/DashboardPage";
 import CheckSystem from "./pages/CheckSystem";
 import { useAuth } from "./context/AuthContext";
 
@@ -53,6 +54,7 @@ export default function App() {
         <Route element={<RouteGuard />}>
           <Route element={<AppShell />}>
             <Route path="/" element={<RoleRedirect />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
 
             {/* Requester Routes */}
             <Route element={<RouteGuard allowedRoles={["REQUESTER"]} />}>
@@ -63,8 +65,8 @@ export default function App() {
             {/* Shared / General Ticket Detail */}
             <Route path="/tickets/:id" element={<TicketDetail />} />
 
-            {/* IT Staff Routes */}
-            <Route element={<RouteGuard allowedRoles={["IT_STAFF"]} />}>
+            {/* IT Staff & Administrator Queue / Ticket Detail Routes */}
+            <Route element={<RouteGuard allowedRoles={["IT_STAFF", "ADMINISTRATOR"]} />}>
               <Route path="/staff/tickets" element={<StaffQueuePage />} />
               <Route path="/staff/tickets/:id" element={<StaffTicketDetailPage />} />
             </Route>

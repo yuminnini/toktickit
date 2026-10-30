@@ -790,7 +790,7 @@ staffRouter.patch("/tickets/:id/priority", requireRole("IT_STAFF"), async (req: 
  * PATCH /api/staff/tickets/:id/status
  * Transition ticket status following matrix with eligible owner precondition
  */
-staffRouter.patch("/tickets/:id/status", requireRole("IT_STAFF"), async (req: Request, res: Response) => {
+staffRouter.patch("/tickets/:id/status", requireRole("IT_STAFF", "ADMINISTRATOR"), async (req: Request, res: Response) => {
   try {
     const ticketId = Number(req.params.id);
     if (!Number.isInteger(ticketId) || ticketId <= 0) {
@@ -815,6 +815,10 @@ staffRouter.patch("/tickets/:id/status", requireRole("IT_STAFF"), async (req: Re
     const prisma = getPrisma();
 
     const result = await prisma.$transaction(async (tx) => {
+      if (typeof tx.$queryRaw === "function") {
+        await tx.$queryRaw`SELECT id FROM "Ticket" WHERE id = ${ticketId} FOR UPDATE`;
+      }
+
       const ticket = await tx.ticket.findUnique({
         where: { id: ticketId },
         include: {
@@ -867,6 +871,22 @@ staffRouter.patch("/tickets/:id/status", requireRole("IT_STAFF"), async (req: Re
             data: {
               error: "OWNER_REQUIRED",
               message: `Ticket must have an assigned eligible owner (active IT Staff or Administrator) before transitioning to ${currentStatus}`,
+            },
+          };
+        }
+      }
+
+      // Actions Taken Precondition (Decision D2): Transitioning to RESOLVED strictly requires >= 1 Action Taken
+      if (currentStatus === "RESOLVED") {
+        const actionCount = await tx.actionTaken.count({
+          where: { ticketId },
+        });
+        if (actionCount === 0) {
+          return {
+            status: 400,
+            data: {
+              error: "ACTION_REQUIRED",
+              message: "Ticket must have at least one Action Taken before transitioning to RESOLVED",
             },
           };
         }
