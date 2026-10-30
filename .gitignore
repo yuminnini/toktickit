@@ -13,12 +13,25 @@ server/prisma/*.db
 # logs & OS
 *.log
 .DS_Store
-# uploads
+Thumbs.db
+# uploads & test scratch
 uploads/
 server/uploads/
 uploads_test/
 server/uploads_test/
-# playwright
+.tmp-tests/
+server/.tmp-tests/
+# playwright & coverage
 test-results/
 playwright-report/
-
+blob-report/
+playwright/.cache/
+coverage/
+# local submission report drafts & helper scripts
+*.docx
+~$*.docx
+assemble_full_docx.cjs
+build_full_submission_docx.cjs
+build_lab4_submission_docx.cjs
+build_parts_lib.cjs
+generate_docx_helpers.cjs
